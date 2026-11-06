@@ -78,7 +78,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/gradle-wrapper-official"
-          printf 'rootProject.name = "wrapper-bootstrap"\\n' > "$RUNNER_TEMP/gradle-wrapper-official/settings.gradle"
+          echo 'rootProject.name = "wrapper-bootstrap"' > "$RUNNER_TEMP/gradle-wrapper-official/settings.gradle"
           /usr/bin/gradle --project-dir "$RUNNER_TEMP/gradle-wrapper-official" wrapper --gradle-version 9.3.1 --distribution-type bin --no-daemon
           cp "$RUNNER_TEMP/gradle-wrapper-official/gradle/wrapper/gradle-wrapper.jar" ./gradle/wrapper/gradle-wrapper.jar
           git config user.name "github-actions[bot]"
