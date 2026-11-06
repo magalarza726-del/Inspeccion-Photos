@@ -1,0 +1,110 @@
+name: Importar proyecto Android, compilar y publicar APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "*.zip"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: inspeccion-photos-apk
+  cancel-in-progress: false
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Importar ZIP de Android Studio
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -d '' zips < <(find . -maxdepth 1 -type f -iname '*.zip' -print0)
+          if [ "${#zips[@]}" -gt 1 ]; then
+            echo "::error::Solo debe haber un ZIP en la raíz. Retira los ZIP anteriores."
+            exit 1
+          fi
+          if [ "${#zips[@]}" -eq 1 ]; then
+            zipfile="${zips[0]}"
+            mkdir -p "$RUNNER_TEMP/inspeccion-source"
+            unzip -q "$zipfile" -d "$RUNNER_TEMP/inspeccion-source"
+            settingsfile="$(find "$RUNNER_TEMP/inspeccion-source" -type f -name settings.gradle.kts -print -quit)"
+            if [ -z "$settingsfile" ]; then
+              echo "::error::El ZIP no contiene settings.gradle.kts de Android Studio."
+              exit 1
+            fi
+            source_dir="$(dirname "$settingsfile")"
+            test -f "$source_dir/app/build.gradle.kts"
+            test -f "$source_dir/gradlew"
+            rsync -a --delete \
+              --exclude='.git/' --exclude='.github/' --exclude='*.zip' \
+              "$source_dir/" ./
+            rm -f -- "$zipfile"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            if ! git diff --cached --quiet; then
+              git commit -m "Importar código Android del ZIP subido"
+              git push origin HEAD:main
+            fi
+          elif [ ! -f ./app/build.gradle.kts ]; then
+            echo "::error::Primero sube un ZIP Android Studio a la raíz del repositorio."
+            exit 1
+          fi
+
+      - name: Configurar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Configurar Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Instalar Android SDK 36
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Configurar Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Compilar APK de pruebas
+        shell: bash
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Preparar archivo APK
+        shell: bash
+        run: |
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          cp app/build/outputs/apk/debug/app-debug.apk Inspeccion-Photos.apk
+
+      - name: Guardar APK como artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: Inspeccion-Photos-APK
+          path: Inspeccion-Photos.apk
+          if-no-files-found: error
+
+      - name: Publicar descarga directa en Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-${{ github.run_number }}
+          name: Inspeccion Photos - compilación ${{ github.run_number }}
+          make_latest: true
+          generate_release_notes: false
+          body: |
+            APK de prueba creado automáticamente desde el proyecto Android Studio.
+            Se distribuye como debug APK. Para actualizar sin desinstalar,
+            configura una firma de aplicación persistente.
+          files: Inspeccion-Photos.apk
+          fail_on_unmatched_files: true
