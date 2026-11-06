@@ -1,0 +1,24 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "DEMO_24E",
+      "properties": {
+        "name": "DEMO 24E",
+        "faculty": "FIMCP",
+        "note": "Geometría ficticia sólo para probar la importación; no representa coordenadas oficiales de ESPOL."
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-79.96680, -2.14715],
+          [-79.96645, -2.14715],
+          [-79.96645, -2.14685],
+          [-79.96680, -2.14685],
+          [-79.96680, -2.14715]
+        ]]
+      }
+    }
+  ]
+}

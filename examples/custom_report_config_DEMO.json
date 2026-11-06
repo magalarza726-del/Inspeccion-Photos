@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "title": "REPORTE DE INSPECCIÓN",
+  "subtitle": "Evidencia fotográfica y registro de condición",
+  "leftHeader": {
+    "type": "IMAGE",
+    "text": "",
+    "imagePath": ""
+  },
+  "rightHeader": {
+    "type": "TEXT",
+    "text": "CLIENTE DEMO S.A.\nÁREA DE CALIDAD\nSEPTIEMBRE 2026",
+    "imagePath": ""
+  },
+  "exportFormats": ["PDF", "WORD", "EXCEL"],
+  "mainBlockLayout": "IMAGE_LEFT_TABLE",
+  "mainImageWidthPercent": 58,
+  "tableRows": 4,
+  "tableColumns": 3,
+  "rowHeaders": ["F1", "F2", "F3", "F4"],
+  "columnHeaders": ["C1", "C2", "C3"],
+  "evidenceColumns": 3
+}
