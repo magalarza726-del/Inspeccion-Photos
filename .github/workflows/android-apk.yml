@@ -3,8 +3,6 @@ name: Importar proyecto Android, compilar y publicar APK
 on:
   push:
     branches: [main]
-    paths:
-      - "*.zip"
   workflow_dispatch:
 
 permissions:
@@ -63,9 +61,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-
-      - name: Configurar Android SDK
-        uses: android-actions/setup-android@v3
 
       - name: Instalar Android SDK 36
         shell: bash
