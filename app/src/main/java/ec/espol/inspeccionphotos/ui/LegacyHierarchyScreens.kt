@@ -164,7 +164,7 @@ fun HierarchyRootScreen(
                         onMenu = onFolderMenu,
                         onToggleCollapsed = onToggleCollapsed
                     )
-
+                }
             }
         }
 
