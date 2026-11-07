@@ -251,6 +251,7 @@ private fun FormTemplateEditor(
 ) {
     val context = LocalContext.current
     var draft by remember(template.id, template.updatedAt) { mutableStateOf(template) }
+    var editorTab by rememberSaveable(template.id) { mutableStateOf("Encabezado") }
     var imageSide by remember { mutableStateOf("left") }
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -276,8 +277,25 @@ private fun FormTemplateEditor(
             }
             LegacyPrimaryButton("Guardar", palette) { onSave(draft) }
         }
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            listOf("Encabezado", "Diseño", "Secciones", "Salida").forEach { tab ->
+                FilterChip(
+                    selected = editorTab == tab,
+                    onClick = { editorTab = tab },
+                    label = { Text(tab) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = palette.blue,
+                        selectedLabelColor = Color.White,
+                        labelColor = palette.text
+                    )
+                )
+            }
+        }
+        Spacer(Modifier.height(12.dp))
 
+        if (editorTab == "Encabezado") {
         FormPanelCard("Identidad del formulario", palette) {
             FormTextField("Nombre del formato", draft.name, palette, 70) { draft = draft.copy(name = it) }
             Spacer(Modifier.height(8.dp))
@@ -302,6 +320,8 @@ private fun FormTemplateEditor(
             Text("Estos cuatro campos pertenecen únicamente a este formato y no modifican el Reporte de Fotos.", color = palette.muted, fontSize = 10.sp)
         }
 
+        }
+        if (editorTab == "Diseño") {
         Spacer(Modifier.height(14.dp))
         FormPanelCard("Estructura de la tabla", palette) {
             SettingsChoiceRowPublic(
@@ -327,6 +347,8 @@ private fun FormTemplateEditor(
             Text("La columna ITEM se numera automáticamente. Durante el llenado se pueden agregar o quitar filas.", color = palette.muted, fontSize = 10.sp)
         }
 
+        }
+        if (editorTab == "Salida") {
         Spacer(Modifier.height(14.dp))
         FormPanelCard("Formatos de exportación", palette) {
             Text(
@@ -365,6 +387,8 @@ private fun FormTemplateEditor(
             Text("Se conserva esta selección para cada formato de formulario.", color = palette.muted, fontSize = 9.sp)
         }
 
+        }
+        if (editorTab == "Secciones") {
         Spacer(Modifier.height(14.dp))
         FormPanelCard("Secciones y firmas", palette) {
             SectionDesigner(
@@ -376,6 +400,8 @@ private fun FormTemplateEditor(
             )
         }
 
+        }
+        if (editorTab == "Diseño") {
         Spacer(Modifier.height(14.dp))
         draft.columns.forEachIndexed { index, column ->
             FormPanelCard("Columna ${index + 1}", palette) {
@@ -437,6 +463,7 @@ private fun FormTemplateEditor(
             Spacer(Modifier.height(10.dp))
         }
 
+        }
         Text("Vista previa del PDF final", color = palette.text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
         Spacer(Modifier.height(7.dp))
         ExactPdfPreview(
