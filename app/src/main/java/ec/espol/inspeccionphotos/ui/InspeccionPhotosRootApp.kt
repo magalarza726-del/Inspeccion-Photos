@@ -1176,6 +1176,24 @@ fun InspeccionPhotosApp() {
         }
     }
 
+    folderPreviewId?.let { id ->
+        InspectionTree.find(folders, id)?.let { folder ->
+            FolderSectionPreviewDialog(
+                folder = folder,
+                config = reportConfig,
+                palette = palette,
+                onDismiss = { folderPreviewId = null },
+                onEditTable = { tableEditorFolderId = id },
+                onEditSections = { sectionEditorFolderId = id },
+                onEditMainImage = { mainImageFolderId = id },
+                onEditObservation = { editGeneralObservation(folder) },
+                onToggleTable = { updateFolder(id) { it.copy(reportTableVisible = !it.reportTableVisible) } },
+                onToggleMainImage = { updateFolder(id) { it.copy(reportMainImageVisible = !it.reportMainImageVisible) } },
+                onToggleSections = { updateFolder(id) { it.copy(reportSectionVisible = !it.reportSectionVisible) } }
+            )
+        }
+    }
+
     folderMoreMenuId?.let { id ->
         InspectionTree.find(folders, id)?.let { folder ->
             LegacyMenuDialog(
@@ -1273,13 +1291,13 @@ fun InspeccionPhotosApp() {
                     mainImageFolderId = null
                     scope.launch {
                         val result = withContext(Dispatchers.IO) { runCatching { mediaStore.copyReportMainImageFromFile(id, File(photo.path)) } }
-                        result.onSuccess { file -> updateFolder(id) { it.copy(reportMainImagePath = file.absolutePath) } }
+                        result.onSuccess { file -> updateFolder(id) { it.copy(reportMainImagePath = file.absolutePath, mainPhotoPath = photo.path) } }
                             .onFailure { Toast.makeText(context, it.message ?: "No se pudo copiar la imagen principal", Toast.LENGTH_LONG).show() }
                     }
                 },
                 onTakePhoto = { mainImageFolderId = null; requestMainImageCamera(id) },
                 onChooseExternal = { mainImageFolderId = null; pendingMainImageFolderId = id; reportMainImagePickerLauncher.launch("image/*") },
-                onClear = { mainImageFolderId = null; updateFolder(id) { it.copy(reportMainImagePath = "") } }
+                onClear = { mainImageFolderId = null; updateFolder(id) { it.copy(reportMainImagePath = "", mainPhotoPath = "") } }
             )
         }
     }
