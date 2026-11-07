@@ -37,7 +37,9 @@ fun FormTemplateManager(
     templates: List<FormTemplate>,
     store: FormTemplateStore,
     onTemplatesChange: (List<FormTemplate>) -> Unit,
-    onMoveToTrash: (FormTemplate) -> Unit = {}
+    onMoveToTrash: (FormTemplate) -> Unit = {},
+    defaultTemplateId: String = "",
+    onDefaultTemplateChange: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -137,7 +139,14 @@ fun FormTemplateManager(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 9.dp)
                     ) {
                         Column(Modifier.padding(14.dp)) {
-                            Text(template.name, color = palette.text, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Text(template.name, color = palette.text, fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp, modifier = Modifier.weight(1f))
+                                TextButton(onClick = { onDefaultTemplateChange(template.id) }) {
+                                    Text(if (template.id == defaultTemplateId) "★ Por defecto" else "☆ Predeterminar",
+                                        fontSize = 11.sp)
+                                }
+                            }
                             Spacer(Modifier.height(3.dp))
                             val dropdownCount = template.columns.count { it.cellType == FormCellType.DROPDOWN }
                             Text(
@@ -428,9 +437,17 @@ private fun FormTemplateEditor(
             Spacer(Modifier.height(10.dp))
         }
 
-        Text("Vista previa del formato", color = palette.text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        Text("Vista previa del PDF final", color = palette.text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
         Spacer(Modifier.height(7.dp))
-        FormTemplatePreview(draft.normalized(), palette)
+        ExactPdfPreview(
+            palette = palette,
+            refreshKey = draft.normalized(),
+            createFile = {
+                FormSubmissionExporter.createPdf(context, FormSubmission(
+                    template = draft.normalized().copy(exportFormats = setOf(FormExportFormat.PDF))
+                ))
+            }
+        )
         Spacer(Modifier.height(14.dp))
         LegacyPrimaryButton("Guardar formato", palette, Modifier.fillMaxWidth()) { onSave(draft) }
     }

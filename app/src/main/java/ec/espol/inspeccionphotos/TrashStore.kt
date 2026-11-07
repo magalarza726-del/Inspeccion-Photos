@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-enum class TrashType { PHOTO, FOLDER, FORM, TEMPLATE }
+enum class TrashType { PHOTO, FOLDER, FORM, TEMPLATE, PHOTO_TEMPLATE }
 
 data class TrashEntry(
     val id: String,

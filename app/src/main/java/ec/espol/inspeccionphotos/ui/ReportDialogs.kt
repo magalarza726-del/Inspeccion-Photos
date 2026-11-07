@@ -89,8 +89,8 @@ fun ExportSelectionDialog(
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 ExportCheck(
-                    "Fotos + Carpetas",
-                    "Incluye la estructura completa, fotos y un manifiesto importable por otra instalación de la app.",
+                    "Incluir archivo ZIP",
+                    "Opcional: respaldo completo de la estructura y todas las fotografías.",
                     value.photosAndStructure, palette
                 ) { value = value.copy(photosAndStructure = it) }
                 ExportCheck(

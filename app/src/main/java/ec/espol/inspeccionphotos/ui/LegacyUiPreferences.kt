@@ -31,6 +31,14 @@ class LegacyUiPreferences(private val context: Context) {
         get() = prefs.getBoolean("show_ot", true)
         set(value) { prefs.edit().putBoolean("show_ot", value).apply() }
 
+    var activePhotoPresetId: String
+        get() = prefs.getString("active_photo_preset_id", "").orEmpty()
+        set(value) { prefs.edit().putString("active_photo_preset_id", value).apply() }
+
+    var defaultFormTemplateId: String
+        get() = prefs.getString("default_form_template_id", "").orEmpty()
+        set(value) { prefs.edit().putString("default_form_template_id", value).apply() }
+
     var defaultPhotoReport: String
         get() = prefs.getString("default_photo_report", "PDF 3").orEmpty()
         set(value) { prefs.edit().putString("default_photo_report", value).apply() }

@@ -48,7 +48,8 @@ fun TrashScreen(
         LazyColumn(verticalArrangement = Arrangement.spacedBy(9.dp)) {
             val groups = listOf(
                 TrashType.PHOTO to "Fotos", TrashType.FOLDER to "Carpetas",
-                TrashType.FORM to "Formularios", TrashType.TEMPLATE to "Formatos"
+                TrashType.FORM to "Formularios", TrashType.TEMPLATE to "Formatos de formularios",
+                TrashType.PHOTO_TEMPLATE to "Formatos de fotos"
             )
             groups.forEach { (type, title) ->
                 val group = entries.filter { it.type == type }.sortedByDescending { it.deletedAt }
