@@ -427,8 +427,7 @@ fun HierarchyFolderScreen(
             title = photo.name,
             options = listOf(
                 "Herramientas de fotos" to { photoToolsFor = photo },
-                "Herramientas de reporte" to { photoReportFor = photo },
-                "Configuración de cámara" to onCameraSettings
+                "Herramientas de reporte" to { photoReportFor = photo }
             ),
             onDismiss = { photoMenu = null },
             palette = palette
