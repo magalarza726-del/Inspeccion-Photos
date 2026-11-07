@@ -9,6 +9,11 @@ import java.io.File
 import java.util.UUID
 
 class FormTemplateStore(private val context: Context) {
+    fun encodeTrashTemplate(template: FormTemplate): String = templateToJson(template.normalized()).toString()
+    fun decodeTrashTemplate(payload: String): FormTemplate = templateFromJson(JSONObject(payload)).normalized()
+    fun encodeTrashSubmission(form: FormSubmission): String = submissionToJson(form.normalized()).toString()
+    fun decodeTrashSubmission(payload: String): FormSubmission = submissionFromJson(JSONObject(payload)).normalized()
+
     private val templatesFile = File(context.filesDir, "form_templates.json")
     private val submissionsFile = File(context.filesDir, "form_submissions.json")
     private val imageDir = File(context.filesDir, "form_template_images").apply { mkdirs() }

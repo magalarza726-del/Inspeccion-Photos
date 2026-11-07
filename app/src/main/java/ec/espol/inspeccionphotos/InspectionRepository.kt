@@ -30,6 +30,9 @@ class InspectionRepository(private val context: Context) {
         }
     }
 
+    fun encodeTrashFolder(folder: Inspection): String = encode(listOf(folder))
+    fun decodeTrashFolder(payload: String): Inspection? = decode(payload).firstOrNull()
+
     fun backupFile(inspections: List<Inspection>): File {
         val out = File(context.cacheDir, "respaldo_datos.json")
         out.writeText(encode(inspections))
