@@ -45,7 +45,8 @@ fun FormsScreen(
     compact: Boolean,
     templates: List<FormTemplate>,
     store: FormTemplateStore,
-    initialOpenSubmissionId: String? = null
+    initialOpenSubmissionId: String? = null,
+    onMoveToTrash: (FormSubmission) -> Unit = { store.deleteSubmission(it.id) }
 ) {
     val context = LocalContext.current
     var submissions by remember(templates) { mutableStateOf(store.reconcileSavedSubmissions(templates)) }
@@ -106,97 +107,28 @@ fun FormsScreen(
     }
 
     var deleteCandidate by remember { mutableStateOf<FormSubmission?>(null) }
+    var showTemplatePicker by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().padding(horizontal = if (compact) 12.dp else 24.dp, vertical = 14.dp)) {
-        if (!compact) {
-            LegacyTitle("Formularios", palette, 25)
-            Spacer(Modifier.height(3.dp))
-            LegacySubtitle("Escoge un formato y llena sus celdas de forma interactiva.", palette)
-            Spacer(Modifier.height(14.dp))
-        }
-
-        Text("Formatos disponibles", color = palette.text, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-        Spacer(Modifier.height(8.dp))
-        if (templates.isEmpty()) {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = palette.surface),
-                border = BorderStroke(1.dp, palette.border),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(Modifier.padding(16.dp)) {
-                    Text("No hay formatos creados", color = palette.text, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(4.dp))
-                    Text("Ve a Panel de Control → Formularios para crear el primer formato.", color = palette.muted, fontSize = 12.sp)
-                }
-            }
-        } else {
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                templates.sortedBy { it.name.lowercase() }.forEach { template ->
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = palette.surface),
-                        border = BorderStroke(1.dp, palette.border),
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier.width(if (compact) 245.dp else 285.dp)
-                    ) {
-                        Column(Modifier.padding(14.dp)) {
-                            Text(template.name, color = palette.text, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Spacer(Modifier.height(3.dp))
-                            Text("${template.columns.size} columna(s) · ${template.initialRows} filas", color = palette.muted, fontSize = 11.sp)
-                            Text(
-                                template.exportFormats.joinToString(" · ") { when (it) { FormExportFormat.PDF -> "PDF"; FormExportFormat.WORD -> "Word"; FormExportFormat.EXCEL -> "Excel" } },
-                                color = palette.muted, fontSize = 10.sp
-                            )
-                            Spacer(Modifier.height(10.dp))
-                            LegacyPrimaryButton("Llenar formulario", palette, Modifier.fillMaxWidth()) {
-                                val submission = store.newSubmission(template)
-                                submissions = store.reconcileSavedSubmissions(templates)
-                                activeId = submission.id
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Spacer(Modifier.height(18.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Formularios guardados", color = palette.text, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.weight(1f))
-            Text("${submissions.size}", color = palette.muted, fontSize = 12.sp)
-        }
-        Spacer(Modifier.height(7.dp))
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            LegacySecondaryButton("Importar JSON", palette) { importSavedJson.launch("application/json") }
-            if (submissions.isNotEmpty()) {
-                LegacySecondaryButton("Exportar guardados JSON", palette) {
-                    exportSavedJson.launch("formularios_guardados_inspeccion_photos.json")
-                }
+            Text("Documentos", color = palette.text, fontSize = 22.sp,
+                fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            FilledTonalIconButton(onClick = { showTemplatePicker = true }) {
+                Icon(androidx.compose.ui.res.painterResource(R.drawable.ic_plus_original),
+                    contentDescription = "Nuevo formulario", tint = palette.blue)
             }
         }
         Spacer(Modifier.height(4.dp))
-        Text(
-            "Este respaldo JSON incluye datos llenados, secciones y una copia del formato usado.",
-            color = palette.muted,
-            fontSize = 9.sp
-        )
-        Spacer(Modifier.height(8.dp))
-
+        Text("Toca un formulario para abrirlo.", color = palette.muted, fontSize = 12.sp)
+        Spacer(Modifier.height(12.dp))
         if (submissions.isEmpty()) {
-            Text("Aún no se ha llenado ningún formulario.", color = palette.muted, fontSize = 12.sp)
+            Text("Todavía no hay formularios. Pulsa + para crear uno.", color = palette.muted)
         } else {
-            LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(submissions.sortedByDescending { it.updatedAt }, key = { it.id }) { submission ->
                     FormSubmissionCard(
-                        submission = submission,
-                        palette = palette,
+                        submission = submission, palette = palette,
                         onOpen = { activeId = submission.id },
-                        onExport = {
-                            runCatching { FormSubmissionExporter.export(context, submission) }
-                                .onSuccess { files -> FormSubmissionExporter.share(context, files) }
-                                .onFailure { Toast.makeText(context, it.message ?: "No se pudo exportar el formulario", Toast.LENGTH_LONG).show() }
-                        },
                         onDelete = { deleteCandidate = submission }
                     )
                 }
@@ -204,17 +136,42 @@ fun FormsScreen(
         }
     }
 
+    if (showTemplatePicker) {
+        AlertDialog(
+            onDismissRequest = { showTemplatePicker = false },
+            title = { Text("Elegir formato") },
+            text = {
+                Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
+                    if (templates.isEmpty()) Text("No hay formatos. Créalos desde Formatos.")
+                    templates.sortedBy { it.name.lowercase() }.forEach { template ->
+                        Text(
+                            template.name, modifier = Modifier.fillMaxWidth().clickable {
+                                val submission = store.newSubmission(template)
+                                submissions = store.reconcileSavedSubmissions(templates)
+                                activeId = submission.id
+                                showTemplatePicker = false
+                            }.padding(vertical = 14.dp), color = palette.text
+                        )
+                        Divider(color = palette.border)
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { showTemplatePicker = false }) { Text("Cancelar") } }
+        )
+    }
+
     deleteCandidate?.let { submission ->
         AlertDialog(
             onDismissRequest = { deleteCandidate = null },
-            title = { Text("Eliminar formulario") },
-            text = { Text("¿Eliminar este llenado de '${submission.template.name}'?") },
+            title = { Text("Mover a papelera") },
+            text = { Text("¿Mover '${submission.template.name}' a la Papelera? Podrás restaurarlo.") },
             confirmButton = {
                 TextButton(onClick = {
-                    store.deleteSubmission(submission.id)
+                    onMoveToTrash(submission)
                     submissions = store.reconcileSavedSubmissions(templates)
                     deleteCandidate = null
-                }) { Text("Eliminar") }
+                }) { Text("Mover") }
             },
             dismissButton = { TextButton(onClick = { deleteCandidate = null }) { Text("Cancelar") } }
         )
@@ -226,29 +183,29 @@ private fun FormSubmissionCard(
     submission: FormSubmission,
     palette: LegacyPalette,
     onOpen: () -> Unit,
-    onExport: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val formatter = remember { SimpleDateFormat("dd MMM yyyy · HH:mm", Locale.getDefault()) }
-    Card(
-        colors = CardDefaults.cardColors(containerColor = palette.surface),
+    val formatter = remember { SimpleDateFormat("dd/MM/yyyy · HH:mm", Locale.getDefault()) }
+    Surface(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen),
+        color = palette.surface,
         border = BorderStroke(1.dp, palette.border),
-        shape = RoundedCornerShape(13.dp),
-        modifier = Modifier.fillMaxWidth()
+        shape = RoundedCornerShape(12.dp)
     ) {
-        Row(Modifier.padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(submission.template.name, color = palette.text, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                Spacer(Modifier.height(2.dp))
-                Text(formatter.format(Date(submission.updatedAt)), color = palette.muted, fontSize = 10.sp)
-                Spacer(Modifier.height(2.dp))
-                Text(if (submission.completed) "Completado" else "Borrador", color = if (submission.completed) palette.green else palette.cyan, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Text(submission.template.name, color = palette.text, fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(formatter.format(Date(submission.updatedAt)), color = palette.muted, fontSize = 10.sp)
+                    Text(if (submission.completed) "Completado" else "Borrador",
+                        color = if (submission.completed) palette.green else palette.cyan, fontSize = 10.sp)
+                }
             }
-            LegacySecondaryButton("Abrir", palette) { onOpen() }
-            Spacer(Modifier.width(7.dp))
-            LegacySecondaryButton("Exportar", palette) { onExport() }
-            Spacer(Modifier.width(5.dp))
-            TextButton(onClick = onDelete) { Text("Eliminar", color = MaterialTheme.colorScheme.error) }
+            IconButton(onClick = onDelete) {
+                Icon(androidx.compose.ui.res.painterResource(R.drawable.ic_trash),
+                    contentDescription = "Mover formulario a papelera", tint = MaterialTheme.colorScheme.error)
+            }
         }
     }
 }
