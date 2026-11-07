@@ -41,6 +41,7 @@ fun LegacySettingsScreen(
     palette: LegacyPalette,
     compact: Boolean,
     developerMode: Boolean = false,
+    driveOnly: Boolean = false,
     darkMode: Boolean,
     spatialFunctionsEnabled: Boolean,
     showOt: Boolean,
@@ -146,6 +147,39 @@ fun LegacySettingsScreen(
             .padding(horizontal = if (compact) 12.dp else 24.dp, vertical = 14.dp)
             .padding(bottom = 24.dp)
     ) {
+        if (driveOnly) {
+            SettingsSectionTitle("API de Google Drive", palette)
+            SettingsSurface(palette) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Conexión de Google Drive", color = palette.text,
+                            fontWeight = FontWeight.SemiBold)
+                        Text(if (googleDriveConnected) "Conexión verificada" else "Sin conexión verificada",
+                            color = if (googleDriveConnected) palette.green else palette.muted)
+                        if (googleDriveConnectedAt > 0L) {
+                            val formatter = remember { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()) }
+                            Text("Última verificación: ${formatter.format(Date(googleDriveConnectedAt))}",
+                                color = palette.muted, fontSize = 11.sp)
+                        }
+                    }
+                    if (driveBusy) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+                }
+                Spacer(Modifier.height(12.dp))
+                LegacyPrimaryButton(
+                    if (googleDriveConnected) "Verificar / cambiar cuenta" else "Conectar Google Drive",
+                    palette, Modifier.fillMaxWidth()
+                ) { if (!driveBusy) connectGoogleDrive() }
+                driveMessage?.let { message ->
+                    Spacer(Modifier.height(8.dp))
+                    Text(message, color = if (googleDriveConnected) palette.green else palette.muted)
+                }
+                Spacer(Modifier.height(10.dp))
+                Text("Usa OAuth 2.0 y el permiso drive.file. Para iniciar sesión, la API de Drive y el cliente OAuth Android deben estar configurados con la huella SHA de esta app.",
+                    color = palette.muted, fontSize = 11.sp)
+            }
+            return@Column
+        }
+
         if (!compact) {
             LegacyTitle("Configuración", palette, 25)
             Spacer(Modifier.height(3.dp))
