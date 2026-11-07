@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,17 +58,21 @@ fun HierarchyRootScreen(
     onSetAllCollapsed: (Boolean) -> Unit,
     onMoveFolders: (Set<String>, String?) -> Unit,
     onExport: (Inspection) -> Unit,
-    onDelete: (Inspection) -> Unit
+    onDelete: (Inspection) -> Unit,
+    onFolderMenu: (Inspection) -> Unit,
+    sortMode: String = "Fecha de creación",
+    onSortChange: (String) -> Unit = {}
 ) {
     var search by remember { mutableStateOf("") }
+    var showRootSort by remember { mutableStateOf(false) }
     var menuFor by remember { mutableStateOf<Inspection?>(null) }
     var organize by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showMove by remember { mutableStateOf(false) }
 
-    val filtered = remember(folders, search) {
+    val filtered = remember(folders, search, sortMode) {
         val q = search.trim()
-        if (q.isBlank()) folders else folders.filter { containsName(it, q) }
+        orderedFolders(if (q.isBlank()) folders else folders.filter { containsName(it, q) }, sortMode)
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -122,13 +127,7 @@ fun HierarchyRootScreen(
                         shape = RoundedCornerShape(12.dp)
                     )
                     Spacer(Modifier.width(8.dp))
-                    LegacyIconActionButton("▦", palette, rootViewMode == FolderViewMode.GALLERY) {
-                        onRootViewMode(FolderViewMode.GALLERY)
-                    }
-                    Spacer(Modifier.width(6.dp))
-                    LegacyIconActionButton("☷", palette, rootViewMode == FolderViewMode.LIST) {
-                        onRootViewMode(FolderViewMode.LIST)
-                    }
+                    LegacyIconActionButton("⇅", palette) { showRootSort = true }
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -143,14 +142,16 @@ fun HierarchyRootScreen(
                     }
                     if (!compact) {
                         Spacer(Modifier.width(6.dp))
-                        LegacyPrimaryButton("+ Carpeta", palette, onClick = onNewFolder)
+                        IconButton(onClick = onNewFolder) {
+                            Icon(painterResource(R.drawable.ic_folder_original), "Nueva carpeta", tint = palette.blue)
+                        }
                     }
                 }
                 Spacer(Modifier.height(8.dp))
 
                 if (filtered.isEmpty()) {
                     EmptyFolderMessage(palette, if (folders.isEmpty()) "No hay carpetas. Crea la primera para comenzar." else "No hay coincidencias.")
-                } else if (rootViewMode == FolderViewMode.GALLERY) {
+                } else {
                     FolderGallery(
                         folders = filtered,
                         palette = palette,
@@ -160,22 +161,10 @@ fun HierarchyRootScreen(
                         selected = emptySet(),
                         onSelect = {},
                         onOpen = onOpen,
-                        onMenu = { menuFor = it },
+                        onMenu = onFolderMenu,
                         onToggleCollapsed = onToggleCollapsed
                     )
-                } else {
-                    FolderList(
-                        folders = filtered,
-                        palette = palette,
-                        showOt = showOt,
-                        organize = false,
-                        selected = emptySet(),
-                        onSelect = {},
-                        onOpen = onOpen,
-                        onMenu = { menuFor = it },
-                        onToggleCollapsed = onToggleCollapsed
-                    )
-                }
+
             }
         }
 
@@ -192,20 +181,11 @@ fun HierarchyRootScreen(
         }
     }
 
-    menuFor?.let { folder ->
+    if (showRootSort) {
         LegacyMenuDialog(
-            title = folder.name,
-            options = buildList {
-                add("Abrir carpeta" to { onOpen(folder.id) })
-                if (showOt) add("Agregar/editar OT" to { onEditOt(folder) })
-                add("Configurar carpeta" to { onConfigure(folder) })
-                add("Renombrar carpeta" to { onRename(folder) })
-                add("Duplicar carpeta" to { onDuplicate(folder) })
-                add("Clonar estructura" to { onCloneStructure(folder) })
-                add((if (folder.collapsed) "Expandir carpeta" else "Contraer carpeta") to { onToggleCollapsed(folder.id) })
-                add("Eliminar carpeta" to { onDelete(folder) })
-            },
-            onDismiss = { menuFor = null },
+            title = "Ordenar carpetas",
+            options = folderSortOptions.map { option -> option to { onSortChange(option) } },
+            onDismiss = { showRootSort = false },
             palette = palette
         )
     }
@@ -259,11 +239,22 @@ fun HierarchyFolderScreen(
     onEditMainImage: () -> Unit,
     reportSections: List<SectionDefinition> = emptyList(),
     onEditReportSections: () -> Unit = {},
-    onExport: () -> Unit
+    onExport: () -> Unit,
+    onFolderMenu: () -> Unit,
+    photoSortMode: String = "Fecha de creación",
+    folderSortMode: String = "Fecha de creación",
+    onSortPhotos: (String) -> Unit = {},
+    onMovePhoto: (PhotoItem) -> Unit = {},
+    onCopyPhoto: (PhotoItem) -> Unit = {},
+    onToggleMainPhoto: (PhotoItem) -> Unit = {},
+    onCameraSettings: () -> Unit = {}
 ) {
     var ot by remember(folder.id, folder.ot) { mutableStateOf(folder.ot) }
     var childMenu by remember { mutableStateOf<Inspection?>(null) }
     var photoMenu by remember { mutableStateOf<PhotoItem?>(null) }
+    var photoToolsFor by remember { mutableStateOf<PhotoItem?>(null) }
+    var photoReportFor by remember { mutableStateOf<PhotoItem?>(null) }
+    var photoSortVisible by remember { mutableStateOf(false) }
     var folderActions by remember { mutableStateOf(false) }
     var organize by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -331,57 +322,17 @@ fun HierarchyFolderScreen(
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             if (folder.allowPhotos) {
-                LegacyPrimaryButton("+ Foto", palette, onClick = onAddPhoto)
-                Spacer(Modifier.width(7.dp))
+                IconButton(onClick = onAddPhoto) {
+                    Icon(painterResource(R.drawable.ic_camera_original), "Agregar foto", tint = palette.blue)
+                }
             }
             if (folder.allowSubfolders && depth < InspectionTree.MAX_SUBFOLDER_LEVELS) {
-                LegacySecondaryButton("+ Carpeta", palette, onClick = onAddChild)
-                Spacer(Modifier.width(7.dp))
+                IconButton(onClick = onAddChild) {
+                    Icon(painterResource(R.drawable.ic_folder_original), "Agregar carpeta", tint = palette.blue)
+                }
             }
             Spacer(Modifier.weight(1f))
-            LegacyIconActionButton("▦", palette, folder.viewMode == FolderViewMode.GALLERY) { onSetViewMode(FolderViewMode.GALLERY) }
-            Spacer(Modifier.width(5.dp))
-            LegacyIconActionButton("☷", palette, folder.viewMode == FolderViewMode.LIST) { onSetViewMode(FolderViewMode.LIST) }
-            Spacer(Modifier.width(5.dp))
-            LegacyIconActionButton("⋮", palette) { folderActions = true }
-        }
-
-        Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Reporte", color = palette.muted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.weight(1f))
-            ReportQuickAction(
-                iconRes = R.drawable.ic_table_report,
-                label = if (folder.reportTableEnabled) "Editar tabla" else "Tabla",
-                active = folder.reportTableEnabled,
-                palette = palette,
-                onClick = onEditReportTable
-            )
-            if (reportSections.isNotEmpty()) {
-                Spacer(Modifier.width(7.dp))
-                ReportQuickAction(
-                    iconRes = R.drawable.ic_sections_report,
-                    label = if (folder.reportSectionValues.values.any { it.isNotBlank() }) "Editar secciones" else "Secciones",
-                    active = folder.reportSectionValues.values.any { it.isNotBlank() },
-                    palette = palette,
-                    onClick = onEditReportSections
-                )
-            }
-            Spacer(Modifier.width(7.dp))
-            ReportQuickAction(
-                iconRes = R.drawable.ic_image_original,
-                label = if (folder.reportMainImagePath.isNotBlank()) "Cambiar imagen" else "Imagen principal",
-                active = folder.reportMainImagePath.isNotBlank(),
-                palette = palette,
-                onClick = onEditMainImage
-            )
-            Spacer(Modifier.width(7.dp))
-            LegacyPrimaryButton(
-                text = "Compartir",
-                palette = palette,
-                modifier = Modifier.heightIn(min = 42.dp),
-                onClick = onExport
-            )
+            LegacyIconActionButton("⋮", palette) { onFolderMenu() }
         }
 
         if (folder.reportMainImagePath.isNotBlank()) {
@@ -435,9 +386,9 @@ fun HierarchyFolderScreen(
             ReorganizeFolderList(folder.children, selected, palette) { selected = selected.toggle(it) }
         } else if (folder.children.isEmpty()) {
             LegacySubtitle(if (folder.allowSubfolders) "No hay subcarpetas." else "La creación de subcarpetas está desactivada.", palette)
-        } else if (folder.viewMode == FolderViewMode.GALLERY) {
+        } else {
             FolderGallery(
-                folders = folder.children,
+                folders = orderedFolders(folder.children, folderSortMode),
                 palette = palette,
                 compact = compact,
                 showOt = showOt,
@@ -445,19 +396,7 @@ fun HierarchyFolderScreen(
                 selected = emptySet(),
                 onSelect = {},
                 onOpen = onOpenChild,
-                onMenu = { childMenu = it },
-                onToggleCollapsed = onToggleChildCollapsed
-            )
-        } else {
-            FolderList(
-                folders = folder.children,
-                palette = palette,
-                showOt = showOt,
-                organize = false,
-                selected = emptySet(),
-                onSelect = {},
-                onOpen = onOpenChild,
-                onMenu = { childMenu = it },
+                onMenu = { onChildMenu(it, "more") },
                 onToggleCollapsed = onToggleChildCollapsed
             )
         }
@@ -470,55 +409,60 @@ fun HierarchyFolderScreen(
         Spacer(Modifier.height(8.dp))
         if (folder.photos.isEmpty()) {
             LegacySubtitle(if (folder.allowPhotos) "No hay fotos en esta carpeta." else "La toma de fotos está desactivada.", palette)
-        } else if (folder.viewMode == FolderViewMode.GALLERY) {
-            PhotoGallery(folder.photos, palette, compact, onOpenPhoto) { photoMenu = it }
         } else {
-            PhotoList(folder.photos, palette, onOpenPhoto) { photoMenu = it }
+            PhotoGallery(orderedPhotos(folder.photos, photoSortMode), palette, compact, onOpenPhoto,
+                mainPhotoPath = folder.mainPhotoPath, onMenu = { photoMenu = it })
         }
-    }
-
-    if (folderActions) {
-        LegacyMenuDialog(
-            title = folder.name,
-            options = listOf(
-                "Configurar carpeta" to onConfigureFolder,
-                "Observación general" to onEditGeneralObservation,
-                "Duplicar carpeta" to onDuplicateFolder,
-                "Clonar estructura" to onCloneStructure,
-                "Reorganizar carpetas" to { organize = true; selected = emptySet() },
-                "Contraer todas" to { onSetAllChildrenCollapsed(true) },
-                "Expandir todas" to { onSetAllChildrenCollapsed(false) },
-            ),
-            onDismiss = { folderActions = false },
-            palette = palette
-        )
-    }
-
-    childMenu?.let { child ->
-        LegacyMenuDialog(
-            title = child.name,
-            options = listOf(
-                "Abrir carpeta" to { onOpenChild(child.id) },
-                (if (child.collapsed) "Expandir" else "Contraer") to { onToggleChildCollapsed(child.id) },
-                "Más opciones" to { onChildMenu(child, "more") }
-            ),
-            onDismiss = { childMenu = null },
-            palette = palette
-        )
     }
 
     photoMenu?.let { photo ->
         LegacyMenuDialog(
             title = photo.name,
-            options = buildList {
-                add("Mostrar imagen" to { onOpenPhoto(photo) })
-                add("Editar foto" to { onEditPhoto(photo) })
-                add("Renombrar foto" to { onRenamePhoto(photo) })
-                add("Añadir observación" to { onEditPhotoObservation(photo) })
-                add("Descargar foto" to { onDownloadPhoto(photo) })
-                add("Eliminar foto" to { onDeletePhoto(photo) })
-            },
+            options = listOf(
+                "Herramientas de fotos" to { photoToolsFor = photo },
+                "Herramientas de reporte" to { photoReportFor = photo },
+                "Configuración de cámara" to onCameraSettings
+            ),
             onDismiss = { photoMenu = null },
+            palette = palette
+        )
+    }
+
+    photoToolsFor?.let { photo ->
+        LegacyMenuDialog(
+            title = "Herramientas de fotos",
+            options = listOf(
+                "Ordenar por" to { photoSortVisible = true },
+                "Editar foto" to { onEditPhoto(photo) },
+                "Mover a" to { onMovePhoto(photo) },
+                "Copiar en" to { onCopyPhoto(photo) },
+                "Cambiar nombre" to { onRenamePhoto(photo) },
+                "Mover a la Papelera" to { onDeletePhoto(photo) }
+            ),
+            onDismiss = { photoToolsFor = null },
+            palette = palette
+        )
+    }
+
+    photoReportFor?.let { photo ->
+        LegacyMenuDialog(
+            title = "Herramientas de reporte",
+            options = listOf(
+                "Añadir observación" to { onEditPhotoObservation(photo) },
+                (if (folder.mainPhotoPath == photo.path) "Quitar imagen principal" else "Usar como imagen principal") to {
+                    onToggleMainPhoto(photo)
+                }
+            ),
+            onDismiss = { photoReportFor = null },
+            palette = palette
+        )
+    }
+
+    if (photoSortVisible) {
+        LegacyMenuDialog(
+            title = "Ordenar fotos",
+            options = folderSortOptions.map { option -> option to { onSortPhotos(option) } },
+            onDismiss = { photoSortVisible = false },
             palette = palette
         )
     }
@@ -720,12 +664,13 @@ private fun PhotoGallery(
     palette: LegacyPalette,
     compact: Boolean,
     onOpen: (PhotoItem) -> Unit,
-    onMenu: (PhotoItem) -> Unit
+    onMenu: (PhotoItem) -> Unit,
+    mainPhotoPath: String = ""
 ) {
     val cols = if (compact) 2 else 4
     photos.chunked(cols).forEach { rowItems ->
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            rowItems.forEach { photo -> PhotoCard(photo, palette, Modifier.weight(1f), onOpen, onMenu) }
+            rowItems.forEach { photo -> PhotoCard(photo, palette, Modifier.weight(1f), onOpen, onMenu, isMain = photo.path == mainPhotoPath) }
             repeat(cols - rowItems.size) { Spacer(Modifier.weight(1f)) }
         }
         Spacer(Modifier.height(8.dp))
@@ -770,18 +715,21 @@ private fun PhotoCard(
     palette: LegacyPalette,
     modifier: Modifier,
     onOpen: (PhotoItem) -> Unit,
-    onMenu: (PhotoItem) -> Unit
+    onMenu: (PhotoItem) -> Unit,
+    isMain: Boolean = false
 ) {
     Card(
         modifier = modifier.height(168.dp).clickable { onOpen(photo) },
         colors = CardDefaults.cardColors(containerColor = palette.surface),
-        border = BorderStroke(1.dp, palette.border),
+        border = BorderStroke(if (isMain) 2.dp else 1.dp, if (isMain) palette.blue else palette.border),
         shape = RoundedCornerShape(13.dp)
     ) {
         Column(Modifier.fillMaxSize().padding(6.dp)) {
             Box(Modifier.fillMaxWidth().height(112.dp).clip(RoundedCornerShape(9.dp)).background(Color.Black)) {
                 val image = rememberHierarchyImage(photo.path)
                 if (image != null) Image(image, photo.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                if (isMain) Text("PRINCIPAL", color = Color.White, fontSize = 9.sp,
+                    modifier = Modifier.align(Alignment.BottomStart).background(palette.blue, RoundedCornerShape(6.dp)).padding(4.dp))
                 Box(Modifier.align(Alignment.TopEnd).background(palette.surface.copy(alpha = .88f), RoundedCornerShape(8.dp))) {
                     LegacyMoreButton(palette) { onMenu(photo) }
                 }
@@ -928,4 +876,20 @@ private fun rememberHierarchyImage(path: String): androidx.compose.ui.graphics.I
         }
     }
     return state.value
+}
+
+private val folderSortOptions = listOf("A-Z", "Z-A", "Fecha de creación", "Fecha de modificación")
+
+private fun orderedFolders(source: List<Inspection>, mode: String): List<Inspection> = when (mode) {
+    "A-Z" -> source.sortedBy { it.name.lowercase() }
+    "Z-A" -> source.sortedByDescending { it.name.lowercase() }
+    "Fecha de modificación" -> source.sortedByDescending { it.modifiedAtMillis }
+    else -> source.sortedByDescending { it.createdAtMillis }
+}
+
+private fun orderedPhotos(source: List<PhotoItem>, mode: String): List<PhotoItem> = when (mode) {
+    "A-Z" -> source.sortedBy { it.name.lowercase() }
+    "Z-A" -> source.sortedByDescending { it.name.lowercase() }
+    "Fecha de modificación" -> source.sortedByDescending { it.modifiedAtMillis }
+    else -> source.sortedByDescending { it.createdAtMillis }
 }
