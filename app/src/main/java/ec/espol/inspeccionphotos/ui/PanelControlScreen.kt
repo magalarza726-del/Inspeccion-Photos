@@ -56,6 +56,20 @@ fun PanelControlScreen(
     val context = LocalContext.current
     var panelTab by rememberSaveable { mutableStateOf("Fotos") }
     var photoTab by rememberSaveable { mutableStateOf("Encabezado") }
+    var previewPhotos by rememberSaveable { mutableStateOf(true) }
+    var previewSeparators by rememberSaveable { mutableStateOf(true) }
+    var previewMain by rememberSaveable { mutableStateOf(true) }
+    var previewGeneral by rememberSaveable { mutableStateOf(true) }
+    var previewSpecific by rememberSaveable { mutableStateOf(true) }
+    var previewPages by rememberSaveable { mutableIntStateOf(1) }
+    val sampleOptions = PhotoPreviewSamples(
+        examplePhotos = previewPhotos,
+        folderSeparators = previewSeparators,
+        mainImage = previewMain,
+        generalObservations = previewGeneral,
+        photoObservations = previewSpecific,
+        pages = previewPages
+    )
     var imageSide by remember { mutableStateOf("left") }
     var cropSide by remember { mutableStateOf<String?>(null) }
 
@@ -314,33 +328,35 @@ fun PanelControlScreen(
     
                     else -> Unit
                 }
+
                 Spacer(Modifier.height(20.dp))
-                Text("Vista previa exacta del PDF", color = palette.text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                PanelSection("Configuración de vista previa", palette) {
+                    PhotoPreviewOptionsEditor(
+                        palette = palette,
+                        options = sampleOptions,
+                        onChange = { option ->
+                            previewPhotos = option.examplePhotos
+                            previewSeparators = option.folderSeparators
+                            previewMain = option.mainImage
+                            previewGeneral = option.generalObservations
+                            previewSpecific = option.photoObservations
+                            previewPages = option.pages
+                        }
+                    )
+                }
+                Spacer(Modifier.height(16.dp))
+                Text("Vista previa exacta del PDF", color = palette.text,
+                    fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Spacer(Modifier.height(6.dp))
-                Text("Se renderiza el mismo archivo que se exporta. El contenido es un ejemplo.",
+                Text("Los ejemplos solo aparecen aquí, nunca se guardan dentro de una inspección real.",
                     color = palette.muted, fontSize = 11.sp)
                 Spacer(Modifier.height(10.dp))
                 ExactPdfPreview(
                     palette = palette,
-                    refreshKey = config,
-                    createFile = {
-                        val previewValues = config.sections.flatMap { it.lines }.flatMap { it.cells }
-                            .filter { it.mode == SectionCellMode.VALUE }
-                            .associate { it.id to "Dato de ejemplo" }
-                        val sample = Inspection(
-                            id = "sample-format",
-                            name = "EJEMPLO DE INSPECCIÓN",
-                            created = "2026-11-06",
-                            reportTableEnabled = true,
-                            reportTableValues = List(config.tableRows) { r ->
-                                List(config.tableColumns) { c -> "Dato ${r + 1}.${c + 1}" }
-                            },
-                            reportSectionValues = previewValues
-                        )
-                        CustomReportExporter.createPdf(context, sample, config)
-                    },
+                    refreshKey = config to sampleOptions,
+                    createFile = { PhotoPreviewSampleFactory.create(context, config, sampleOptions) },
                     modifier = Modifier.fillMaxWidth(),
-                    maxPages = 6
+                    maxPages = sampleOptions.pages
                 )
             } else {
                 FormTemplateManager(
