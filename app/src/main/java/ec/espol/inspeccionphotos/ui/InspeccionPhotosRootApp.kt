@@ -52,7 +52,7 @@ private data class LegacyConfirmState(
 )
 
 private data class PreparedFolderExport(
-    val zip: File,
+    val zip: File?,
     val standardReports: List<File>,
     val spatialReports: List<File>,
     val customReports: List<File>
@@ -734,21 +734,49 @@ fun InspeccionPhotosApp() {
                     val customReports = if (selection.customReport) {
                         CustomReportExporter.createAll(context, folder, reportConfig)
                     } else emptyList()
-                    val backup = if (selection.photosAndStructure) repository.backupFile(folders) else null
-                    val zip = ExportUtils.createInspectionZipSelected(
-                        context = context,
-                        inspection = folder,
-                        selection = selection,
-                        selectedPdfs = standardReports,
-                        spatialReports = spatialReports,
-                        customReports = customReports,
-                        backup = backup
-                    )
+                    val zip = if (selection.photosAndStructure) {
+                        val backup = repository.backupFile(folders)
+                        ExportUtils.createInspectionZipSelected(
+                            context = context,
+                            inspection = folder,
+                            selection = selection,
+                            selectedPdfs = standardReports,
+                            spatialReports = spatialReports,
+                            customReports = customReports,
+                            backup = backup
+                        )
+                    } else null
                     PreparedFolderExport(zip, standardReports, spatialReports, customReports)
                 }
             }
             result.onSuccess { prepared ->
-                ExportUtils.shareFile(context, prepared.zip, "application/zip")
+                val reports = prepared.standardReports + prepared.spatialReports + prepared.customReports
+                val filesToShare = prepared.zip?.let(::listOf) ?: reports
+                when (filesToShare.size) {
+                    0 -> Toast.makeText(context, "No se seleccionaron archivos para compartir", Toast.LENGTH_SHORT).show()
+                    1 -> {
+                        val file = filesToShare.first()
+                        val mime = when (file.extension.lowercase()) {
+                            "zip" -> "application/zip"
+                            "pdf" -> "application/pdf"
+                            "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                            "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            else -> "application/octet-stream"
+                        }
+                        ExportUtils.shareFile(context, file, mime)
+                    }
+                    else -> {
+                        val uris = ArrayList(filesToShare.map {
+                            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", it)
+                        })
+                        val intent = android.content.Intent(android.content.Intent.ACTION_SEND_MULTIPLE).apply {
+                            type = "application/octet-stream"
+                            putParcelableArrayListExtra(android.content.Intent.EXTRA_STREAM, uris)
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(android.content.Intent.createChooser(intent, "Compartir reportes"))
+                    }
+                }
                 scope.launch(Dispatchers.IO) {
                     runCatching {
                         prepared.standardReports.forEach { ExportUtils.copyToDownloads(context, it, "application/pdf") }
@@ -762,7 +790,7 @@ fun InspeccionPhotosApp() {
                             }
                             ExportUtils.copyToDownloads(context, file, mime)
                         }
-                        ExportUtils.copyToDownloads(context, prepared.zip, "application/zip")
+                        prepared.zip?.let { ExportUtils.copyToDownloads(context, it, "application/zip") }
                     }
                 }
             }.onFailure {
