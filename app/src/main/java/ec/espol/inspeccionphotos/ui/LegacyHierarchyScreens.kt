@@ -59,7 +59,7 @@ fun HierarchyRootScreen(
     onMoveFolders: (Set<String>, String?) -> Unit,
     onExport: (Inspection) -> Unit,
     onDelete: (Inspection) -> Unit,
-    onFolderMenu: (Inspection) -> Unit,
+    onFolderMenu: (Inspection) -> Unit = {},
     sortMode: String = "Fecha de creación",
     onSortChange: (String) -> Unit = {}
 ) {
@@ -240,7 +240,7 @@ fun HierarchyFolderScreen(
     reportSections: List<SectionDefinition> = emptyList(),
     onEditReportSections: () -> Unit = {},
     onExport: () -> Unit,
-    onFolderMenu: () -> Unit,
+    onFolderMenu: () -> Unit = {},
     photoSortMode: String = "Fecha de creación",
     folderSortMode: String = "Fecha de creación",
     onSortPhotos: (String) -> Unit = {},
