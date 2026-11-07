@@ -65,6 +65,37 @@ fun LegacyBatchCameraScreen(
         LegacyCapturedPhoto(file, sessionObservations.getOrNull(index).orEmpty())
     }
 
+    val takePhotoNow: () -> Unit = capture@{
+        if (!ready || capturing) return@capture
+        val activeController = controller ?: return@capture
+        capturing = true
+        val virtualPhotos = folder.photos + sessionFiles.map { PhotoItem(it.name, it.absolutePath) }
+        val name = mediaStore.nextPhotoName(folder.name, virtualPhotos)
+        val file = runCatching { mediaStore.createCaptureFile(folder.id, name) }.getOrElse {
+            capturing = false
+            Toast.makeText(context, it.message ?: "No se pudo preparar la foto", Toast.LENGTH_LONG).show()
+            return@capture
+        }
+        activeController.takePhoto(file) { result ->
+            capturing = false
+            result.onSuccess { saved ->
+                val capturedObservation = observationProvider()
+                if (askBeforeSaving) {
+                    pendingCapturedPath = saved.absolutePath
+                    pendingCapturedObservation = capturedObservation
+                } else if (singleShot) {
+                    onFinish(listOf(LegacyCapturedPhoto(saved, capturedObservation)))
+                } else {
+                    sessionFilePaths = ArrayList(sessionFilePaths + saved.absolutePath)
+                    sessionObservations = ArrayList(sessionObservations + capturedObservation)
+                }
+            }.onFailure { err ->
+                runCatching { file.delete() }
+                Toast.makeText(context, err.message ?: "No se pudo tomar la foto", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     Dialog(onDismissRequest = {}, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize(), color = Color.Black) {
             if (lifecycleOwner == null) {
@@ -72,7 +103,9 @@ fun LegacyBatchCameraScreen(
                     Text("No se pudo iniciar la cámara integrada", color = Color.White)
                 }
             } else {
-                Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                    // Se adapta al tamaño disponible sin recrear la sesión CameraX al girar.
+                    val isLandscape = maxWidth > maxHeight
                     AndroidView<PreviewView>(
                         factory = { ctx -> PreviewView(ctx).also { previewView = it } },
                         modifier = Modifier.fillMaxSize()
@@ -122,112 +155,115 @@ fun LegacyBatchCameraScreen(
                         Text("⚡", color = Color.White, fontSize = 20.sp)
                     }
 
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .align(Alignment.BottomCenter)
-                            .background(Color.Black.copy(alpha = .72f))
-                            .padding(horizontal = 18.dp, vertical = 12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("FOTO", color = palette.cyan, fontSize = 11.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                            Text(if (singleShot) "UNA POR UNA" else "SESIÓN ${sessionFiles.size}", color = Color.White.copy(alpha = .7f), fontSize = 11.sp)
-                        }
-                        if (!singleShot && sessionFiles.isNotEmpty()) {
-                            Spacer(Modifier.height(8.dp))
-                            Row(
-                                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(7.dp)
-                            ) {
-                                sessionFiles.forEachIndexed { index, file ->
-                                    val bitmap = remember(file.absolutePath, file.lastModified()) {
-                                        ImageOrientationUtils.decodeOrientedBitmap(file, 320)
-                                    }
-                                    Box(
-                                        Modifier.size(58.dp).background(Color.White.copy(alpha = .10f), RoundedCornerShape(9.dp)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        if (bitmap != null) {
-                                            Image(bitmap.asImageBitmap(), "Foto ${index + 1}", Modifier.fillMaxSize().padding(2.dp), contentScale = ContentScale.Crop)
-                                        } else Text("${index + 1}", color = Color.White)
-                                    }
-                                }
-                            }
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+
+                    if (isLandscape) {
+                        // Como en la cámara del teléfono: obturador centrado en el lateral derecho.
+                        Box(
+                            Modifier
+                                .fillMaxHeight()
+                                .width(132.dp)
+                                .align(Alignment.CenterEnd)
+                                .background(Color.Black.copy(alpha = .72f))
+                                .padding(horizontal = 9.dp, vertical = 10.dp)
                         ) {
-                            Box(
-                                Modifier
-                                    .size(54.dp)
-                                    .background(Color.White.copy(alpha = .12f), RoundedCornerShape(10.dp)),
-                                contentAlignment = Alignment.Center
+                            Column(
+                                Modifier.align(Alignment.TopCenter),
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Text(sessionFiles.size.toString().padStart(2, '0'), color = Color.White, fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                Text("FOTO", color = palette.cyan, fontSize = 11.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                Text(
+                                    if (singleShot) "UNA POR UNA" else "SESIÓN ${sessionFiles.size}",
+                                    color = Color.White.copy(alpha = .75f), fontSize = 10.sp
+                                )
                             }
-
-                            Button(
-                                onClick = {
-                                    if (!ready || capturing) return@Button
-                                    capturing = true
-                                    val virtualPhotos = folder.photos + sessionFiles.map { PhotoItem(it.name, it.absolutePath) }
-                                    val name = mediaStore.nextPhotoName(folder.name, virtualPhotos)
-                                    val file = runCatching { mediaStore.createCaptureFile(folder.id, name) }.getOrElse {
-                                        capturing = false
-                                        Toast.makeText(context, it.message ?: "No se pudo preparar la foto", Toast.LENGTH_LONG).show()
-                                        return@Button
-                                    }
-                                    controller?.takePhoto(file) { result ->
-                                        capturing = false
-                                        result.onSuccess { saved ->
-                                            // Congelar la metadata espacial en el instante de ESTA captura. En una
-                                            // sesión continua cada foto puede tener posición/orientación distinta.
-                                            val capturedObservation = observationProvider()
-                                            if (askBeforeSaving) {
-                                                pendingCapturedPath = saved.absolutePath
-                                                pendingCapturedObservation = capturedObservation
-                                            } else if (singleShot) {
-                                                onFinish(listOf(LegacyCapturedPhoto(saved, capturedObservation)))
-                                            } else {
-                                                sessionFilePaths = ArrayList(sessionFilePaths + saved.absolutePath)
-                                                sessionObservations = ArrayList(sessionObservations + capturedObservation)
-                                            }
-                                        }.onFailure { err ->
-                                                runCatching { file.delete() }
-                                                Toast.makeText(context, err.message ?: "No se pudo tomar la foto", Toast.LENGTH_LONG).show()
-                                            }
-                                    }
-                                },
-                                enabled = ready && !capturing,
-                                modifier = Modifier.size(86.dp),
-                                shape = CircleShape,
-                                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
-                                contentPadding = PaddingValues(0.dp)
-                            ) {
-                                Box(
-                                    Modifier.size(70.dp).background(Color.White, CircleShape),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(if (capturing) "…" else "", color = Color.Black, fontSize = 24.sp)
-                                }
-                            }
-
+                            CameraShutter(
+                                ready = ready,
+                                capturing = capturing,
+                                onCapture = takePhotoNow,
+                                modifier = Modifier.align(Alignment.Center)
+                            )
                             if (singleShot) {
-                                Box(Modifier.width(78.dp), contentAlignment = Alignment.Center) {
-                                    Text("1 foto", color = Color.White.copy(alpha = .65f), fontSize = 11.sp)
-                                }
+                                Text(
+                                    "1 foto",
+                                    color = Color.White.copy(alpha = .75f),
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.align(Alignment.BottomCenter)
+                                )
                             } else {
                                 Button(
                                     onClick = { if (sessionFiles.isNotEmpty()) onFinish(completedCaptures()) },
                                     enabled = sessionFiles.isNotEmpty(),
                                     colors = ButtonDefaults.buttonColors(containerColor = palette.blue, contentColor = Color.White),
-                                    shape = RoundedCornerShape(12.dp)
+                                    shape = RoundedCornerShape(12.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                    modifier = Modifier.align(Alignment.BottomCenter)
                                 ) {
                                     Text("Finalizar", fontSize = 12.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                }
+                            }
+                        }
+                    } else {
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .align(Alignment.BottomCenter)
+                                .background(Color.Black.copy(alpha = .72f))
+                                .padding(horizontal = 18.dp, vertical = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("FOTO", color = palette.cyan, fontSize = 11.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                Text(if (singleShot) "UNA POR UNA" else "SESIÓN ${sessionFiles.size}", color = Color.White.copy(alpha = .7f), fontSize = 11.sp)
+                            }
+                            if (!singleShot && sessionFiles.isNotEmpty()) {
+                                Spacer(Modifier.height(8.dp))
+                                Row(
+                                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(7.dp)
+                                ) {
+                                    sessionFiles.forEachIndexed { index, file ->
+                                        val bitmap = remember(file.absolutePath, file.lastModified()) {
+                                            ImageOrientationUtils.decodeOrientedBitmap(file, 320)
+                                        }
+                                        Box(
+                                            Modifier.size(58.dp).background(Color.White.copy(alpha = .10f), RoundedCornerShape(9.dp)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            if (bitmap != null) {
+                                                Image(bitmap.asImageBitmap(), "Foto ${index + 1}", Modifier.fillMaxSize().padding(2.dp), contentScale = ContentScale.Crop)
+                                            } else Text("${index + 1}", color = Color.White)
+                                        }
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Box(
+                                    Modifier
+                                        .size(54.dp)
+                                        .background(Color.White.copy(alpha = .12f), RoundedCornerShape(10.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(sessionFiles.size.toString().padStart(2, '0'), color = Color.White, fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                }
+                                CameraShutter(ready, capturing, takePhotoNow)
+                                if (singleShot) {
+                                    Box(Modifier.width(78.dp), contentAlignment = Alignment.Center) {
+                                        Text("1 foto", color = Color.White.copy(alpha = .65f), fontSize = 11.sp)
+                                    }
+                                } else {
+                                    Button(
+                                        onClick = { if (sessionFiles.isNotEmpty()) onFinish(completedCaptures()) },
+                                        enabled = sessionFiles.isNotEmpty(),
+                                        colors = ButtonDefaults.buttonColors(containerColor = palette.blue, contentColor = Color.White),
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Text("Finalizar", fontSize = 12.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                    }
                                 }
                             }
                         }
@@ -285,6 +321,31 @@ fun LegacyBatchCameraScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+
+@Composable
+private fun CameraShutter(
+    ready: Boolean,
+    capturing: Boolean,
+    onCapture: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Button(
+        onClick = onCapture,
+        enabled = ready && !capturing,
+        modifier = modifier.size(86.dp),
+        shape = CircleShape,
+        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+        contentPadding = PaddingValues(0.dp)
+    ) {
+        Box(
+            Modifier.size(70.dp).background(Color.White, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            if (capturing) Text("…", color = Color.Black, fontSize = 24.sp)
         }
     }
 }

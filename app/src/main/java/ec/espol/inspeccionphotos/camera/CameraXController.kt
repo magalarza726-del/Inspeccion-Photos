@@ -2,6 +2,7 @@ package ec.espol.inspeccionphotos.camera
 
 import android.content.Context
 import android.view.Surface
+import android.view.OrientationEventListener
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
@@ -30,9 +31,33 @@ class CameraXController(
     private var videoCapture: VideoCapture<Recorder>? = null
     private var recording: Recording? = null
     @Volatile private var released = false
+    // Rotación física del dispositivo (independiente del bloqueo de rotación de pantalla).
+    private var deviceRotation: Int? = null
+    private var orientationListener: OrientationEventListener? = null
 
     fun bind(onReady: (Boolean, String?) -> Unit = { _, _ -> }) {
         released = false
+        orientationListener?.disable()
+        orientationListener = null
+        if (mode == CameraXMode.PHOTO) {
+            orientationListener = object : OrientationEventListener(context) {
+                override fun onOrientationChanged(degrees: Int) {
+                    if (released || degrees == ORIENTATION_UNKNOWN) return
+                    // Correspondencia oficial CameraX: el sensor reporta grados horarios,
+                    // mientras Surface usa la rotación necesaria para volver a la posición natural.
+                    val rotation = when (degrees) {
+                        in 45 until 135 -> Surface.ROTATION_270
+                        in 135 until 225 -> Surface.ROTATION_180
+                        in 225 until 315 -> Surface.ROTATION_90
+                        else -> Surface.ROTATION_0
+                    }
+                    if (deviceRotation != rotation) {
+                        deviceRotation = rotation
+                        imageCapture?.targetRotation = rotation
+                    }
+                }
+            }.also { if (it.canDetectOrientation()) it.enable() }
+        }
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
             runCatching {
@@ -41,7 +66,7 @@ class CameraXController(
                     cameraProvider.unbindAll()
                     error("Cámara cerrada")
                 }
-                val targetRotation = previewView.display?.rotation ?: Surface.ROTATION_0
+                val targetRotation = deviceRotation ?: previewView.display?.rotation ?: Surface.ROTATION_0
                 val preview = Preview.Builder()
                     .setTargetRotation(targetRotation)
                     .build()
@@ -76,9 +101,9 @@ class CameraXController(
     fun takePhoto(file: File, onResult: (Result<File>) -> Unit) {
         if (released) return onResult(Result.failure(IllegalStateException("Cámara cerrada")))
         val capture = imageCapture ?: return onResult(Result.failure(IllegalStateException("Cámara todavía no está lista")))
-        // La rotación puede cambiar mientras la sesión permanece abierta. CameraX escribe la
-        // orientación correcta en EXIF tomando como referencia esta rotación actual.
-        capture.targetRotation = previewView.display?.rotation ?: capture.targetRotation
+        // El sensor prevalece sobre la rotación visible de pantalla. Así se registra
+        // la orientación correcta en EXIF incluso con rotación automática bloqueada.
+        capture.targetRotation = deviceRotation ?: previewView.display?.rotation ?: capture.targetRotation
         file.parentFile?.mkdirs()
         val options = ImageCapture.OutputFileOptions.Builder(file).build()
         capture.takePicture(options, ContextCompat.getMainExecutor(context), object : ImageCapture.OnImageSavedCallback {
@@ -105,6 +130,9 @@ class CameraXController(
 
     fun release() {
         released = true
+        orientationListener?.disable()
+        orientationListener = null
+        deviceRotation = null
         recording?.stop()
         recording = null
         provider?.unbindAll()
