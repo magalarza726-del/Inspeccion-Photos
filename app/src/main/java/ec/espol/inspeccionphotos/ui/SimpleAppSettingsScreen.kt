@@ -27,7 +27,9 @@ fun SimpleAppSettingsScreen(
     onChooseLogo: () -> Unit,
     onClearLogo: () -> Unit,
     onSpatialChange: (Boolean) -> Unit,
-    onAdvanced: () -> Unit
+    onAdvanced: () -> Unit,
+    onExportConfiguration: () -> Unit,
+    onImportConfiguration: () -> Unit
 ) {
     var companyDraft by remember(companyName) { mutableStateOf(companyName) }
     Column(
@@ -78,6 +80,26 @@ fun SimpleAppSettingsScreen(
                 }
             }
         }
+        Surface(color = palette.surface, shape = RoundedCornerShape(14.dp),
+            border = BorderStroke(1.dp, palette.border)) {
+            Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                Text("Respaldo de configuración (.json)", color = palette.text,
+                    fontWeight = FontWeight.SemiBold)
+                Text("Incluye preferencias, empresa, logo y formatos; no incluye fotos ni formularios rellenados.",
+                    color = palette.muted, fontSize = 11.sp)
+                Spacer(Modifier.height(10.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onExportConfiguration, modifier = Modifier.weight(1f)) {
+                        Text("Exportar JSON", fontSize = 12.sp)
+                    }
+                    OutlinedButton(onClick = onImportConfiguration, modifier = Modifier.weight(1f)) {
+                        Text("Importar JSON", fontSize = 12.sp)
+                    }
+                }
+                Text("Al importar se reemplaza la configuración existente.",
+                    color = palette.muted, fontSize = 10.sp)
+            }
+        }
         if (developerMode) {
             Surface(color = palette.surface, shape = RoundedCornerShape(14.dp),
                 border = BorderStroke(1.dp, palette.border)) {
@@ -92,7 +114,7 @@ fun SimpleAppSettingsScreen(
                     }
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(onClick = onAdvanced, modifier = Modifier.fillMaxWidth()) {
-                        Text("Herramientas avanzadas y respaldos")
+                        Text("API de Google Drive")
                     }
                 }
             }
