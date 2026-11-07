@@ -3,6 +3,9 @@ name: Importar proyecto Android, compilar y publicar APK
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '.github/workflows/pages.yml'
   workflow_dispatch:
 
 permissions:
