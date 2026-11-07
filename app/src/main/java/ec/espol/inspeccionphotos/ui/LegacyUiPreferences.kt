@@ -10,6 +10,10 @@ enum class EditorPromptMode { ASK_AFTER_CAPTURE, NEVER_ASK }
 enum class CameraSessionMode { ONE_BY_ONE, BATCH }
 
 class LegacyUiPreferences(private val context: Context) {
+    var developerModeEnabled: Boolean
+        get() = prefs.getBoolean("developer_mode_enabled", false)
+        set(value) { prefs.edit().putBoolean("developer_mode_enabled", value).apply() }
+
     private val prefs = context.getSharedPreferences("inspeccion_photos_prefs", Context.MODE_PRIVATE)
 
     var darkMode: Boolean

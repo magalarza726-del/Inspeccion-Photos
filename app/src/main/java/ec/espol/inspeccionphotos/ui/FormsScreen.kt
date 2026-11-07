@@ -44,11 +44,13 @@ fun FormsScreen(
     palette: LegacyPalette,
     compact: Boolean,
     templates: List<FormTemplate>,
-    store: FormTemplateStore
+    store: FormTemplateStore,
+    initialOpenSubmissionId: String? = null
 ) {
     val context = LocalContext.current
     var submissions by remember(templates) { mutableStateOf(store.reconcileSavedSubmissions(templates)) }
     var activeId by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(initialOpenSubmissionId) { if (initialOpenSubmissionId != null) activeId = initialOpenSubmissionId }
 
     val exportSavedJson = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) {

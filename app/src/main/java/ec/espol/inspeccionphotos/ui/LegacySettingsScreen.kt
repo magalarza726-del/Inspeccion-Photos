@@ -40,6 +40,7 @@ import java.util.Locale
 fun LegacySettingsScreen(
     palette: LegacyPalette,
     compact: Boolean,
+    developerMode: Boolean = false,
     darkMode: Boolean,
     spatialFunctionsEnabled: Boolean,
     showOt: Boolean,
@@ -152,7 +153,8 @@ fun LegacySettingsScreen(
             Spacer(Modifier.height(18.dp))
         }
 
-        SettingsSectionTitle("Funciones", palette)
+        if (developerMode) {
+        SettingsSectionTitle("Levantamiento (desarrollador)", palette)
         SettingsSurface(palette) {
             SettingsSwitchRow(
                 title = "Agregar funciones espaciales",
@@ -172,6 +174,7 @@ fun LegacySettingsScreen(
         }
 
         Spacer(Modifier.height(18.dp))
+        }
         SettingsSectionTitle("Cámara y captura", palette)
         SettingsSurface(palette) {
             SettingsChoiceRow(

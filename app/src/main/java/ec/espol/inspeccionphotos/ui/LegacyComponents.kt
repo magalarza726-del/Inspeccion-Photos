@@ -77,7 +77,7 @@ fun legacyPalette(dark: Boolean): LegacyPalette = if (dark) {
     )
 }
 
-enum class LegacyRootSection { HOME, FOLDERS, FORMS, CONTROL_PANEL, SETTINGS }
+enum class LegacyRootSection { HOME, FOLDERS, FORMS, TRASH, CONTROL_PANEL, SETTINGS, SEARCH }
 
 /**
  * Contenedor principal sin barra lateral. La navegación entre módulos parte de la pantalla

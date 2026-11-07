@@ -80,6 +80,7 @@ fun InspeccionPhotosApp() {
     }
 
     var darkMode by remember { mutableStateOf(prefs.darkMode) }
+    var developerModeEnabled by remember { mutableStateOf(prefs.developerModeEnabled) }
     var spatialFunctionsEnabled by remember { mutableStateOf(prefs.spatialFunctionsEnabled) }
     var showOt by remember { mutableStateOf(prefs.showOt) }
     var companyName by remember { mutableStateOf(prefs.companyName) }
@@ -138,6 +139,7 @@ fun InspeccionPhotosApp() {
     val rootSection = runCatching { LegacyRootSection.valueOf(rootSectionName) }.getOrDefault(LegacyRootSection.HOME)
     var folders by remember { mutableStateOf(repository.load()) }
     var selectedFolderId by rememberSaveable { mutableStateOf<String?>(null) }
+    var requestedFormId by remember { mutableStateOf<String?>(null) }
 
     var inputDialog by remember { mutableStateOf<LegacyInputState?>(null) }
     var confirmDialog by remember { mutableStateOf<LegacyConfirmState?>(null) }
@@ -678,10 +680,12 @@ fun InspeccionPhotosApp() {
         selected = rootSection,
         compactTitle = when (rootSection) {
             LegacyRootSection.HOME -> "Inspeccion Photos"
-            LegacyRootSection.FOLDERS -> selectedFolder()?.name ?: "Fotos + Carpetas"
-            LegacyRootSection.FORMS -> "Formularios"
-            LegacyRootSection.CONTROL_PANEL -> "Panel de Control"
+            LegacyRootSection.FOLDERS -> selectedFolder()?.name ?: "Cámara"
+            LegacyRootSection.FORMS -> "Documentos"
+            LegacyRootSection.CONTROL_PANEL -> "Formatos"
             LegacyRootSection.SETTINGS -> "Configuración"
+            LegacyRootSection.TRASH -> "Papelera"
+            LegacyRootSection.SEARCH -> "Buscar"
         },
         compactSubtitle = when (rootSection) {
             LegacyRootSection.HOME -> ""
@@ -689,6 +693,8 @@ fun InspeccionPhotosApp() {
             LegacyRootSection.FORMS -> "Selecciona y llena un formato"
             LegacyRootSection.CONTROL_PANEL -> "Configura reportes y formatos de formularios"
             LegacyRootSection.SETTINGS -> "Preferencias de la aplicación"
+            LegacyRootSection.TRASH -> "Elementos eliminados recuperables"
+            LegacyRootSection.SEARCH -> "Buscar carpetas, fotos y documentos"
         },
         onHome = { rootSectionName = LegacyRootSection.HOME.name }
     ) { compact ->
@@ -696,15 +702,18 @@ fun InspeccionPhotosApp() {
             LegacyRootSection.HOME -> MainMenuScreen(
                 palette = palette,
                 compact = compact,
+                developerModeEnabled = developerModeEnabled,
+                onDeveloperUnlocked = {
+                    developerModeEnabled = true
+                    prefs.developerModeEnabled = true
+                    Toast.makeText(context, "Modo desarrollador desbloqueado", Toast.LENGTH_LONG).show()
+                },
                 onPhotos = { rootSectionName = LegacyRootSection.FOLDERS.name },
                 onForms = { rootSectionName = LegacyRootSection.FORMS.name },
+                onTrash = { rootSectionName = LegacyRootSection.TRASH.name },
                 onPanel = { rootSectionName = LegacyRootSection.CONTROL_PANEL.name },
                 onSettings = { rootSectionName = LegacyRootSection.SETTINGS.name },
-                onImportZip = {
-                    zipImportLauncher.launch(
-                        arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")
-                    )
-                }
+                onSearch = { rootSectionName = LegacyRootSection.SEARCH.name }
             )
             LegacyRootSection.FOLDERS -> {
                 val current = selectedFolder()
@@ -768,7 +777,8 @@ fun InspeccionPhotosApp() {
                 palette = palette,
                 compact = compact,
                 templates = formTemplates,
-                store = formStore
+                store = formStore,
+                initialOpenSubmissionId = requestedFormId
             )
             LegacyRootSection.CONTROL_PANEL -> PanelControlScreen(
                 palette = palette, compact = compact, config = reportConfig, store = reportStore,
@@ -776,9 +786,20 @@ fun InspeccionPhotosApp() {
                 onConfigChange = { updated -> reportConfig = updated.normalized(); reportStore.save(reportConfig) },
                 onFormTemplatesChange = { updated -> formTemplates = updated.map { it.normalized() }; formStore.saveTemplates(formTemplates) }
             )
+            LegacyRootSection.TRASH -> Text("Papelera", color = palette.text)
+            LegacyRootSection.SEARCH -> SearchScreen(
+                palette = palette,
+                folders = folders,
+                submissions = formStore.loadSubmissions(),
+                templates = formTemplates,
+                onOpenFolder = { selectedFolderId = it; rootSectionName = LegacyRootSection.FOLDERS.name },
+                onOpenForm = { requestedFormId = it; rootSectionName = LegacyRootSection.FORMS.name },
+                onOpenFormats = { rootSectionName = LegacyRootSection.CONTROL_PANEL.name }
+            )
             LegacyRootSection.SETTINGS -> LegacySettingsScreen(
                 palette = palette,
                 compact = compact,
+                developerMode = developerModeEnabled,
                 darkMode = darkMode,
                 spatialFunctionsEnabled = spatialFunctionsEnabled,
                 showOt = showOt,
