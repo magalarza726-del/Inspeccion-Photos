@@ -66,6 +66,8 @@ fun InspeccionPhotosApp() {
     val prefs = remember { LegacyUiPreferences(context) }
     val reportStore = remember { CustomReportConfigStore(context) }
     val formStore = remember { FormTemplateStore(context) }
+    val trashStore = remember { TrashStore(context) }
+    var trashEntries by remember { mutableStateOf(trashStore.load()) }
     val archiveImporter = remember { InspectionArchiveImporter(context) }
     val configurationBackup = remember { AppConfigurationBackup(context) }
     val locationTracker = remember { LocationTracker(context) }
@@ -573,6 +575,11 @@ fun InspeccionPhotosApp() {
         Toast.makeText(context, "Estructura clonada sin fotos", Toast.LENGTH_SHORT).show()
     }
 
+    fun sendToTrash(type: TrashType, name: String, payload: String, parentId: String? = null) {
+        trashStore.put(type, name, payload, parentId)
+        trashEntries = trashStore.load()
+    }
+
     fun deleteFilesRecursive(folder: Inspection) {
         folder.photos.forEach(mediaStore::deletePhoto)
         folder.children.forEach(::deleteFilesRecursive)
@@ -580,9 +587,11 @@ fun InspeccionPhotosApp() {
     }
 
     fun requestDeleteFolder(folder: Inspection) {
-        confirmDialog = LegacyConfirmState("Eliminar carpeta", "¿Eliminar ${folder.name}, sus subcarpetas y sus fotos? Esta acción no puede deshacerse.") {
-            deleteFilesRecursive(folder)
+        confirmDialog = LegacyConfirmState(
+            "Mover a Papelera", "¿Mover ${folder.name} y su contenido a la Papelera?", "Mover"
+        ) {
             val parent = InspectionTree.parentId(folders, folder.id)
+            sendToTrash(TrashType.FOLDER, folder.name, repository.encodeTrashFolder(folder), parent)
             val (updated, _) = InspectionTree.remove(folders, folder.id)
             persist(updated)
             if (selectedFolderId == folder.id) selectedFolderId = parent
@@ -663,8 +672,14 @@ fun InspeccionPhotosApp() {
     }
 
     fun deletePhoto(folderId: String, photo: PhotoItem) {
-        confirmDialog = LegacyConfirmState("Eliminar foto", "¿Eliminar ${photo.name}?") {
-            mediaStore.deletePhoto(photo)
+        confirmDialog = LegacyConfirmState("Mover a Papelera", "¿Mover ${photo.name} a la Papelera?", "Mover") {
+            val payload = org.json.JSONObject().apply {
+                put("name", photo.name)
+                put("path", photo.path)
+                put("observation", photo.observation)
+                put("originalPath", photo.originalPath)
+            }.toString()
+            sendToTrash(TrashType.PHOTO, photo.name, payload, folderId)
             updateFolder(folderId) { it.copy(photos = it.photos.filterNot { p -> p.path == photo.path }) }
         }
     }
@@ -778,15 +793,97 @@ fun InspeccionPhotosApp() {
                 compact = compact,
                 templates = formTemplates,
                 store = formStore,
-                initialOpenSubmissionId = requestedFormId
+                initialOpenSubmissionId = requestedFormId,
+                onMoveToTrash = { form ->
+                    sendToTrash(TrashType.FORM, form.template.name, formStore.encodeTrashSubmission(form))
+                    formStore.deleteSubmission(form.id)
+                }
             )
             LegacyRootSection.CONTROL_PANEL -> PanelControlScreen(
                 palette = palette, compact = compact, config = reportConfig, store = reportStore,
                 formTemplates = formTemplates, formStore = formStore,
                 onConfigChange = { updated -> reportConfig = updated.normalized(); reportStore.save(reportConfig) },
-                onFormTemplatesChange = { updated -> formTemplates = updated.map { it.normalized() }; formStore.saveTemplates(formTemplates) }
+                onFormTemplatesChange = { updated -> formTemplates = updated.map { it.normalized() }; formStore.saveTemplates(formTemplates) },
+                onTemplateTrash = { template ->
+                    sendToTrash(TrashType.TEMPLATE, template.name, formStore.encodeTrashTemplate(template))
+                }
             )
-            LegacyRootSection.TRASH -> Text("Papelera", color = palette.text)
+            LegacyRootSection.TRASH -> TrashScreen(
+                palette = palette,
+                entries = trashEntries,
+                onRestore = { entries ->
+                    val restoredIds = mutableSetOf<String>()
+                    val sorted = entries.sortedBy { if (it.type == TrashType.FOLDER) 0 else 1 }
+                    sorted.forEach { entry ->
+                        runCatching {
+                            when (entry.type) {
+                                TrashType.FOLDER -> {
+                                    val folder = repository.decodeTrashFolder(entry.payload) ?: error("Carpeta inválida")
+                                    if (InspectionTree.find(folders, folder.id) == null) {
+                                        val parent = entry.parentId?.takeIf { InspectionTree.find(folders, it) != null }
+                                        persist(InspectionTree.insert(folders, parent, folder))
+                                    }
+                                }
+                                TrashType.PHOTO -> {
+                                    val json = org.json.JSONObject(entry.payload)
+                                    val photo = PhotoItem(
+                                        json.getString("name"), json.getString("path"),
+                                        json.optString("observation"), json.optString("originalPath")
+                                    )
+                                    val parent = entry.parentId?.let { InspectionTree.find(folders, it) }
+                                    if (parent != null) {
+                                        updateFolder(parent.id) { folder ->
+                                            if (folder.photos.any { it.path == photo.path }) folder
+                                            else folder.copy(photos = folder.photos + photo)
+                                        }
+                                    } else {
+                                        val date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                                        val recovered = folders.firstOrNull { it.name == "Fotos recuperadas" }
+                                        if (recovered != null) updateFolder(recovered.id) { it.copy(photos = it.photos + photo) }
+                                        else persist(folders + Inspection(UUID.randomUUID().toString(), "Fotos recuperadas", date, photos = listOf(photo)))
+                                    }
+                                }
+                                TrashType.FORM -> formStore.upsertSubmission(formStore.decodeTrashSubmission(entry.payload))
+                                TrashType.TEMPLATE -> {
+                                    val template = formStore.decodeTrashTemplate(entry.payload)
+                                    if (formTemplates.none { it.id == template.id }) {
+                                        formTemplates = formTemplates + template
+                                        formStore.saveTemplates(formTemplates)
+                                    }
+                                }
+                            }
+                            restoredIds.add(entry.id)
+                        }.onFailure {
+                            Toast.makeText(context, "No se pudo restaurar: ${it.message}", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                    trashStore.remove(restoredIds)
+                    trashEntries = trashStore.load()
+                },
+                onDeleteForever = { entries ->
+                    val removedIds = mutableSetOf<String>()
+                    entries.forEach { entry ->
+                        runCatching {
+                            when (entry.type) {
+                                TrashType.FOLDER -> repository.decodeTrashFolder(entry.payload)?.let(::deleteFilesRecursive)
+                                TrashType.PHOTO -> {
+                                    val json = org.json.JSONObject(entry.payload)
+                                    mediaStore.deletePhoto(PhotoItem(
+                                        json.getString("name"), json.getString("path"),
+                                        json.optString("observation"), json.optString("originalPath")
+                                    ))
+                                }
+                                else -> Unit
+                            }
+                            removedIds.add(entry.id)
+                        }.onFailure {
+                            Toast.makeText(context, "No se pudo eliminar: ${it.message}", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                    trashStore.remove(removedIds)
+                    trashEntries = trashStore.load()
+                }
+            )
             LegacyRootSection.SEARCH -> SearchScreen(
                 palette = palette,
                 folders = folders,
