@@ -271,7 +271,15 @@ fun InspeccionPhotosApp() {
                     hiddenLegacyPdfs = prefs.hiddenLegacyPdfs
                     googleDriveConnected = false
                     googleDriveConnectedAt = 0L
-                    reportConfig = reportStore.load()
+                    photoPresets = photoPresetStore.load()
+                    activePhotoPresetId = prefs.activePhotoPresetId
+                        .takeIf { id -> photoPresets.any { it.id == id } }
+                        ?: photoPresets.firstOrNull()?.id.orEmpty()
+                    reportConfig = photoPresets.firstOrNull { it.id == activePhotoPresetId }?.config
+                        ?: reportStore.load()
+                    defaultPhotoReport = prefs.defaultPhotoReport
+                    defaultFormTemplateId = prefs.defaultFormTemplateId
+                    developerModeEnabled = prefs.developerModeEnabled
                     formTemplates = formStore.loadTemplates()
                     Toast.makeText(
                         context,
