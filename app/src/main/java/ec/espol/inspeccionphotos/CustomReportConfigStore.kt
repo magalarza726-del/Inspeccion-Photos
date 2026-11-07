@@ -41,13 +41,16 @@ class CustomReportConfigStore(private val context: Context) {
         toJson(config.normalized(), portable = true)
 
     /** Restaura un formato personalizado desde su JSON portátil y lo deja guardado. */
-    fun importPortableJson(json: JSONObject): CustomReportConfig {
+    fun fromPortableJson(json: JSONObject): CustomReportConfig {
         val imported = fromJson(json)
         return imported.copy(
             leftHeader = restorePortableImage(json.optJSONObject("leftHeader"), imported.leftHeader, "left"),
             rightHeader = restorePortableImage(json.optJSONObject("rightHeader"), imported.rightHeader, "right")
-        ).normalized().also(::save)
+        ).normalized()
     }
+
+    fun importPortableJson(json: JSONObject): CustomReportConfig =
+        fromPortableJson(json).also(::save)
 
     fun exportToUri(config: CustomReportConfig, uri: Uri) {
         context.contentResolver.openOutputStream(uri)?.use { out ->
@@ -67,7 +70,7 @@ class CustomReportConfigStore(private val context: Context) {
         if (base64.isBlank()) return slot
         return runCatching {
             val ext = json.optString("imageExtension", "jpg").replace(Regex("[^A-Za-z0-9]"), "").ifBlank { "jpg" }
-            val file = File(imageDir, "header_${side}.$ext")
+            val file = File(imageDir, "header_${side}_${java.util.UUID.randomUUID()}.$ext")
             file.writeBytes(Base64.decode(base64, Base64.DEFAULT))
             slot.copy(imagePath = file.absolutePath)
         }.getOrDefault(slot)
