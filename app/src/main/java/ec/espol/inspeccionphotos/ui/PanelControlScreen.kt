@@ -40,7 +40,18 @@ fun PanelControlScreen(
     formStore: FormTemplateStore,
     onConfigChange: (CustomReportConfig) -> Unit,
     onFormTemplatesChange: (List<FormTemplate>) -> Unit,
-    onTemplateTrash: (FormTemplate) -> Unit = {}
+    onTemplateTrash: (FormTemplate) -> Unit = {},
+    defaultFormTemplateId: String = "",
+    onDefaultFormTemplateChange: (String) -> Unit = {},
+    photoPresets: List<PhotoReportPreset> = emptyList(),
+    activePhotoPresetId: String = "",
+    defaultPhotoReport: String = "PDF 3",
+    onPhotoPresetSelect: (String) -> Unit = {},
+    onPhotoPresetNew: () -> Unit = {},
+    onPhotoPresetDuplicate: () -> Unit = {},
+    onPhotoPresetRename: () -> Unit = {},
+    onPhotoPresetTrash: () -> Unit = {},
+    onDefaultPhotoReportChange: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     var panelTab by rememberSaveable { mutableStateOf("Fotos") }
@@ -78,7 +89,7 @@ fun PanelControlScreen(
             .padding(horizontal = if (compact) 12.dp else 24.dp, vertical = 10.dp)
     ) {
         if (!compact) {
-            LegacyTitle("Panel de Control", palette, 25)
+            LegacyTitle("Formatos", palette, 25)
             Spacer(Modifier.height(3.dp))
             LegacySubtitle("Configura por separado el reporte fotográfico y los formularios.", palette)
             Spacer(Modifier.height(12.dp))
@@ -105,6 +116,16 @@ fun PanelControlScreen(
                     .padding(bottom = 32.dp)
             ) {
             if (panelTab == "Fotos") {
+                PhotoPresetControls(
+                    palette, photoPresets, activePhotoPresetId, defaultPhotoReport,
+                    onSelect = onPhotoPresetSelect,
+                    onNew = onPhotoPresetNew,
+                    onDuplicate = onPhotoPresetDuplicate,
+                    onRename = onPhotoPresetRename,
+                    onTrash = onPhotoPresetTrash,
+                    onDefault = onDefaultPhotoReportChange
+                )
+                Spacer(Modifier.height(12.dp))
                 when (photoTab) {
                     "Encabezado" -> {
                         PanelSection("Encabezado del reporte", palette) {
@@ -288,18 +309,36 @@ fun PanelControlScreen(
                         }
                     }
     
-                    else -> {
-                        Text("Vista previa del formato fotográfico", color = palette.text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "La previsualización representa la geometría final. Las fotos y valores reales se insertan al exportar.",
-                            color = palette.muted,
-                            fontSize = 11.sp
-                        )
-                        Spacer(Modifier.height(10.dp))
-                        CustomReportPreview(config, palette, Modifier.fillMaxWidth())
-                    }
+                    else -> Unit
                 }
+                Spacer(Modifier.height(20.dp))
+                Text("Vista previa exacta del PDF", color = palette.text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Spacer(Modifier.height(6.dp))
+                Text("Se renderiza el mismo archivo que se exporta. El contenido es un ejemplo.",
+                    color = palette.muted, fontSize = 11.sp)
+                Spacer(Modifier.height(10.dp))
+                ExactPdfPreview(
+                    palette = palette,
+                    refreshKey = config,
+                    createFile = {
+                        val previewValues = config.sections.flatMap { it.lines }.flatMap { it.cells }
+                            .filter { it.mode == SectionCellMode.VALUE }
+                            .associate { it.id to "Dato de ejemplo" }
+                        val sample = Inspection(
+                            id = "sample-format",
+                            name = "EJEMPLO DE INSPECCIÓN",
+                            created = "2026-11-06",
+                            reportTableEnabled = true,
+                            reportTableValues = List(config.tableRows) { r ->
+                                List(config.tableColumns) { c -> "Dato ${r + 1}.${c + 1}" }
+                            },
+                            reportSectionValues = previewValues
+                        )
+                        CustomReportExporter.createPdf(context, sample, config)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxPages = 6
+                )
             } else {
                 FormTemplateManager(
                     palette = palette,
@@ -307,7 +346,9 @@ fun PanelControlScreen(
                     templates = formTemplates,
                     store = formStore,
                     onTemplatesChange = onFormTemplatesChange,
-                    onMoveToTrash = onTemplateTrash
+                    onMoveToTrash = onTemplateTrash,
+                    defaultTemplateId = defaultFormTemplateId,
+                    onDefaultTemplateChange = onDefaultFormTemplateChange
                 )
             }
         }
@@ -321,7 +362,7 @@ private fun PhotoControlTabs(selected: String, palette: LegacyPalette, onSelecte
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(7.dp)
     ) {
-        listOf("Encabezado", "Diseño", "Secciones", "Salida", "Vista previa").forEach { item ->
+        listOf("Encabezado", "Diseño", "Secciones", "Salida").forEach { item ->
             FilterChip(
                 selected = selected == item,
                 onClick = { onSelected(item) },
