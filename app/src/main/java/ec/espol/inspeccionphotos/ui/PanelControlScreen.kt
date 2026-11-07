@@ -373,7 +373,6 @@ fun PanelControlScreen(
         }
     }
             }
-        }
     cropSide?.let { side ->
         val slot = if (side == "left") config.leftHeader else config.rightHeader
         if (slot.imagePath.isNotBlank()) {
