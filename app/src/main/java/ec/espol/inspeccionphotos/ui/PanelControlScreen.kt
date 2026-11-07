@@ -57,6 +57,7 @@ fun PanelControlScreen(
     var panelTab by rememberSaveable { mutableStateOf("Fotos") }
     var photoTab by rememberSaveable { mutableStateOf("Encabezado") }
     var imageSide by remember { mutableStateOf("left") }
+    var cropSide by remember { mutableStateOf<String?>(null) }
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) runCatching {
@@ -144,7 +145,8 @@ fun PanelControlScreen(
                                 config.leftHeader,
                                 palette,
                                 onChange = { onConfigChange(config.copy(leftHeader = it)) },
-                                onPickImage = { imageSide = "left"; imagePicker.launch("image/*") }
+                                onPickImage = { imageSide = "left"; imagePicker.launch("image/*") },
+                                onCropImage = { cropSide = "left" }
                             )
                             Spacer(Modifier.height(14.dp))
                             Text("Espacio 4 · derecha", color = palette.text, fontWeight = FontWeight.Bold, fontSize = 13.sp)
@@ -152,7 +154,8 @@ fun PanelControlScreen(
                                 config.rightHeader,
                                 palette,
                                 onChange = { onConfigChange(config.copy(rightHeader = it)) },
-                                onPickImage = { imageSide = "right"; imagePicker.launch("image/*") }
+                                onPickImage = { imageSide = "right"; imagePicker.launch("image/*") },
+                                onCropImage = { cropSide = "right" }
                             )
                         }
                     }
@@ -355,6 +358,22 @@ fun PanelControlScreen(
     }
             }
         }
+    cropSide?.let { side ->
+        val slot = if (side == "left") config.leftHeader else config.rightHeader
+        if (slot.imagePath.isNotBlank()) {
+            HeaderImageCropDialog(
+                imagePath = slot.imagePath,
+                palette = palette,
+                onDismiss = { cropSide = null },
+                onSave = { path ->
+                    val cropped = slot.copy(type = ReportSlotType.IMAGE, imagePath = path)
+                    onConfigChange(if (side == "left") config.copy(leftHeader = cropped) else config.copy(rightHeader = cropped))
+                    cropSide = null
+                }
+            )
+        } else cropSide = null
+    }
+}
 
 @Composable
 private fun PhotoControlTabs(selected: String, palette: LegacyPalette, onSelected: (String) -> Unit) {
@@ -418,7 +437,8 @@ private fun HeaderSlotEditor(
     slot: ReportHeaderSlot,
     palette: LegacyPalette,
     onChange: (ReportHeaderSlot) -> Unit,
-    onPickImage: () -> Unit
+    onPickImage: () -> Unit,
+    onCropImage: () -> Unit
 ) {
     Spacer(Modifier.height(6.dp))
     LegacySegmentedChoice(
@@ -481,7 +501,16 @@ private fun HeaderSlotEditor(
                 }
             }
             Spacer(Modifier.height(7.dp))
-            LegacySecondaryButton(if (file.exists()) "Cambiar imagen" else "Seleccionar imagen", palette, Modifier.fillMaxWidth(), onPickImage)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                LegacySecondaryButton(if (file.exists()) "Cambiar" else "Subir imagen",
+                    palette, Modifier.weight(1f), onPickImage)
+                if (file.exists()) {
+                    LegacySecondaryButton("Recortar", palette, Modifier.weight(1f), onCropImage)
+                    LegacySecondaryButton("Eliminar", palette, Modifier.weight(1f)) {
+                        onChange(slot.copy(type = ReportSlotType.EMPTY, imagePath = ""))
+                    }
+                }
+            }
         }
     }
 }
