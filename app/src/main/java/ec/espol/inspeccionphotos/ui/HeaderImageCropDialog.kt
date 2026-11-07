@@ -40,7 +40,7 @@ fun HeaderImageCropDialog(
         runCatching { ImageOrientationUtils.decodeOrientedBitmap(File(imagePath), 2200) }.getOrNull()
     }
     var ratioName by remember(imagePath) { mutableStateOf("Original") }
-    var fraction by remember(imagePath) { mutableFloatStateOf(0.85f) }
+    var fraction by remember(imagePath) { mutableFloatStateOf(1f) }
     var horizontal by remember(imagePath) { mutableFloatStateOf(0.5f) }
     var vertical by remember(imagePath) { mutableFloatStateOf(0.5f) }
     var saving by remember { mutableStateOf(false) }
