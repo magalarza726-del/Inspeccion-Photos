@@ -147,6 +147,15 @@ fun InspeccionPhotosApp() {
     var confirmDialog by remember { mutableStateOf<LegacyConfirmState?>(null) }
     var configureFolderId by remember { mutableStateOf<String?>(null) }
     var folderMoreMenuId by remember { mutableStateOf<String?>(null) }
+    var folderToolsId by remember { mutableStateOf<String?>(null) }
+    var folderSortPickerId by remember { mutableStateOf<String?>(null) }
+    var folderPreviewId by remember { mutableStateOf<String?>(null) }
+    var copyFolderId by remember { mutableStateOf<String?>(null) }
+    var cameraSettingsVisible by remember { mutableStateOf(false) }
+    var sortRevision by remember { mutableIntStateOf(0) }
+    var photoTransferFolderId by remember { mutableStateOf<String?>(null) }
+    var photoTransferPath by remember { mutableStateOf<String?>(null) }
+    var photoTransferCopy by remember { mutableStateOf(false) }
     var singleMoveFolderId by remember { mutableStateOf<String?>(null) }
     var exportDialogFolderId by remember { mutableStateOf<String?>(null) }
     var tableEditorFolderId by remember { mutableStateOf<String?>(null) }
@@ -441,7 +450,11 @@ fun InspeccionPhotosApp() {
     }
 
     fun requestAddPhoto(folderId: String) {
-        if (addPhotoAction == AddPhotoAction.CAMERA_DIRECT) requestTakePhoto(folderId) else addPhotoChoiceFolderId = folderId
+        when (addPhotoAction) {
+            AddPhotoAction.CAMERA_DIRECT -> requestTakePhoto(folderId)
+            AddPhotoAction.ATTACH -> requestPickPhoto(folderId)
+            AddPhotoAction.ASK -> addPhotoChoiceFolderId = folderId
+        }
     }
 
     fun createRootFolderDialog() {
@@ -538,7 +551,7 @@ fun InspeccionPhotosApp() {
             if (parentDepth + 1 + InspectionTree.subtreeDepth(source) > InspectionTree.MAX_SUBFOLDER_LEVELS) {
                 Toast.makeText(context, "La copia superaría los 7 subniveles", Toast.LENGTH_LONG).show(); return@launch
             }
-            val rootName = uniqueSiblingName(source, "_copia")
+            val rootName = uniqueSiblingName(source, " - Copia")
             val copy = withContext(Dispatchers.IO) { duplicateFolderFiles(source, rootName) }
             persist(InspectionTree.insert(folders, parentId, copy))
             Toast.makeText(context, "Carpeta duplicada", Toast.LENGTH_SHORT).show()
@@ -571,7 +584,7 @@ fun InspeccionPhotosApp() {
             Toast.makeText(context, "La estructura clonada superaría los 7 subniveles", Toast.LENGTH_LONG).show()
             return
         }
-        val rootName = uniqueSiblingName(source, "_estructura")
+        val rootName = uniqueSiblingName(source, " - Estructura")
         val copy = cloneStructureNode(source, rootName)
         persist(InspectionTree.insert(folders, parentId, copy))
         Toast.makeText(context, "Estructura clonada sin fotos", Toast.LENGTH_SHORT).show()
@@ -602,6 +615,105 @@ fun InspeccionPhotosApp() {
 
     fun exportFolder(folder: Inspection) {
         exportDialogFolderId = folder.id
+    }
+
+    fun shareQuick(folder: Inspection) {
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val option = prefs.defaultPhotoReport
+                    if (option == "Personalizado") {
+                        CustomReportExporter.createAll(context, folder,
+                            reportConfig.copy(exportFormats = setOf(ReportExportFormat.PDF))).first { it.extension.equals("pdf", true) }
+                    } else {
+                        val columns = option.substringAfter("PDF ").toIntOrNull()?.coerceIn(1, 4) ?: 3
+                        ExportUtils.createObservationPdf(context, folder, columns)
+                    }
+                }
+            }
+            result.onSuccess { ExportUtils.shareFile(context, it, "application/pdf") }
+                .onFailure { Toast.makeText(context, "No se pudo compartir: ${it.message}", Toast.LENGTH_LONG).show() }
+        }
+    }
+
+    fun copyFolderTo(source: Inspection, destinationId: String?) {
+        val target = destinationId?.let { InspectionTree.find(folders, it) }
+        val destDepth = destinationId?.let { InspectionTree.depth(folders, it) } ?: -1
+        if (destDepth + 1 + InspectionTree.subtreeDepth(source) > InspectionTree.MAX_SUBFOLDER_LEVELS ||
+            (destinationId != null && target?.allowSubfolders != true)) {
+            Toast.makeText(context, "La carpeta destino no admite este nivel", Toast.LENGTH_LONG).show()
+            return
+        }
+        scope.launch {
+            val siblings = target?.children ?: folders
+            val base = "${source.name} - Copia"
+            var candidate = base
+            var n = 2
+            while (siblings.any { it.name.equals(candidate, true) }) {
+                candidate = "$base ($n)"
+                n++
+            }
+            val copied = withContext(Dispatchers.IO) { duplicateFolderFiles(source, candidate) }
+            persist(InspectionTree.insert(folders, destinationId, copied))
+            Toast.makeText(context, "Copia creada", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun transferPhoto(sourceFolderId: String, photoPath: String, destinationId: String, copy: Boolean) {
+        val source = InspectionTree.find(folders, sourceFolderId) ?: return
+        val target = InspectionTree.find(folders, destinationId) ?: return
+        val photo = source.photos.firstOrNull { it.path == photoPath } ?: return
+        if (!target.allowPhotos || (!copy && sourceFolderId == destinationId)) return
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val original = File(photo.path)
+                    require(original.exists()) { "La fotografía ya no existe" }
+                    val desired = mediaStore.nextPhotoName(target.name, target.photos)
+                    val dest = mediaStore.createCaptureFile(target.id, desired)
+                    original.copyTo(dest, overwrite = true)
+                    val backup = photo.originalPath.takeIf { it.isNotBlank() }?.let(::File)
+                    val backupCopy = backup?.takeIf { it.exists() }?.let {
+                        val backupDir = File(mediaStore.photosDir(target.id), "originals").apply { mkdirs() }
+                        File(backupDir, dest.name).also { file -> it.copyTo(file, overwrite = true) }
+                    }
+                    val moved = photo.copy(name = dest.name, path = dest.absolutePath,
+                        originalPath = if (copy) "" else backupCopy?.absolutePath.orEmpty(),
+                        modifiedAtMillis = System.currentTimeMillis())
+                    moved to dest
+                }
+            }
+            result.onSuccess { (newPhoto, _) ->
+                var next = folders
+                if (!copy) next = InspectionTree.update(next, sourceFolderId) { it.copy(
+                    photos = it.photos.filterNot { p -> p.path == photoPath },
+                    mainPhotoPath = if (it.mainPhotoPath == photoPath) "" else it.mainPhotoPath
+                ) }
+                next = InspectionTree.update(next, destinationId) { it.copy(photos = it.photos + newPhoto) }
+                persist(next)
+                if (!copy) {
+                    runCatching { File(photo.path).delete() }
+                    photo.originalPath.takeIf { it.isNotBlank() }?.let { runCatching { File(it).delete() } }
+                }
+                Toast.makeText(context, if (copy) "Foto copiada" else "Foto movida", Toast.LENGTH_SHORT).show()
+            }.onFailure { Toast.makeText(context, "No se pudo mover/copiar: ${it.message}", Toast.LENGTH_LONG).show() }
+        }
+    }
+
+    fun toggleMainPhoto(folderId: String, photo: PhotoItem) {
+        val folder = InspectionTree.find(folders, folderId) ?: return
+        if (folder.mainPhotoPath == photo.path) {
+            updateFolder(folderId) { it.copy(mainPhotoPath = "", reportMainImagePath = "") }
+        } else {
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { mediaStore.copyReportMainImageFromFile(folderId, File(photo.path)) }
+                }
+                result.onSuccess { file ->
+                    updateFolder(folderId) { it.copy(mainPhotoPath = photo.path, reportMainImagePath = file.absolutePath) }
+                }.onFailure { Toast.makeText(context, it.message ?: "No se pudo seleccionar la imagen", Toast.LENGTH_LONG).show() }
+            }
+        }
     }
 
     fun executeExport(folder: Inspection, rawSelection: ExportSelection) {
@@ -748,7 +860,10 @@ fun InspeccionPhotosApp() {
                             Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
                         },
                         onExport = ::exportFolder,
-                        onDelete = ::requestDeleteFolder
+                        onDelete = ::requestDeleteFolder,
+                        onFolderMenu = ::showFolderMoreMenu,
+                        sortMode = prefs.folderSort("_root_").also { sortRevision },
+                        onSortChange = { prefs.setFolderSort("_root_", it); sortRevision++ }
                     )
                 } else {
                     val ancestors = InspectionTree.ancestors(folders, current.id)
@@ -786,7 +901,23 @@ fun InspeccionPhotosApp() {
                         onEditMainImage = { mainImageFolderId = current.id },
                         reportSections = reportConfig.sections,
                         onEditReportSections = { sectionEditorFolderId = current.id },
-                        onExport = { exportFolder(current) }
+                        onExport = { exportFolder(current) },
+                        onFolderMenu = { showFolderMoreMenu(current) },
+                        folderSortMode = prefs.folderSort(current.id).also { sortRevision },
+                        photoSortMode = prefs.photoSort(current.id).also { sortRevision },
+                        onSortPhotos = { prefs.setPhotoSort(current.id, it); sortRevision++ },
+                        onMovePhoto = { photo ->
+                            photoTransferFolderId = current.id
+                            photoTransferPath = photo.path
+                            photoTransferCopy = false
+                        },
+                        onCopyPhoto = { photo ->
+                            photoTransferFolderId = current.id
+                            photoTransferPath = photo.path
+                            photoTransferCopy = true
+                        },
+                        onToggleMainPhoto = { photo -> toggleMainPhoto(current.id, photo) },
+                        onCameraSettings = { cameraSettingsVisible = true }
                     )
                 }
             }
@@ -1049,19 +1180,46 @@ fun InspeccionPhotosApp() {
         InspectionTree.find(folders, id)?.let { folder ->
             LegacyMenuDialog(
                 title = folder.name,
-                options = buildList {
-                    add("Abrir carpeta" to { selectedFolderId = folder.id })
-                    if (showOt) add("Agregar/editar OT" to { editOt(folder) })
-                    add("Configurar carpeta" to { configureFolderId = folder.id })
-                    add("Renombrar carpeta" to { renameFolder(folder) })
-                    add("Duplicar carpeta" to { duplicateFolder(folder) })
-                    add("Clonar estructura" to { cloneStructure(folder) })
-                    add((if (folder.collapsed) "Expandir carpeta" else "Contraer carpeta") to { updateFolder(folder.id) { it.copy(collapsed = !it.collapsed) } })
-                    add("Mover carpeta" to { singleMoveFolderId = folder.id })
-                    add("Eliminar carpeta" to { requestDeleteFolder(folder) })
-                }, onDismiss = { folderMoreMenuId = null }, palette = palette
+                options = listOf(
+                    "Herramientas de carpeta" to { folderToolsId = id },
+                    "Vista previa de esta sección" to { folderPreviewId = id },
+                    "Compartir rápido" to { shareQuick(folder) },
+                    "Compartir completo" to { exportFolder(folder) }
+                ),
+                onDismiss = { folderMoreMenuId = null },
+                palette = palette
             )
         }
+    }
+
+    folderToolsId?.let { id ->
+        InspectionTree.find(folders, id)?.let { folder ->
+            LegacyMenuDialog(
+                title = "Herramientas de carpeta",
+                options = listOf(
+                    "Ordenar por" to { folderSortPickerId = id },
+                    "Clonar estructura en" to { cloneStructure(folder) },
+                    "Mover a" to { singleMoveFolderId = id },
+                    "Copiar en" to { copyFolderId = id },
+                    "Cambiar nombre" to { renameFolder(folder) },
+                    "Mover a la Papelera" to { requestDeleteFolder(folder) },
+                    "Configuración de carpeta" to { configureFolderId = id }
+                ),
+                onDismiss = { folderToolsId = null },
+                palette = palette
+            )
+        }
+    }
+
+    folderSortPickerId?.let { id ->
+        LegacyMenuDialog(
+            title = "Ordenar por",
+            options = listOf("A-Z", "Z-A", "Fecha de creación", "Fecha de modificación").map { option ->
+                option to { prefs.setFolderSort(id, option); sortRevision++ }
+            },
+            onDismiss = { folderSortPickerId = null },
+            palette = palette
+        )
     }
 
     exportDialogFolderId?.let { id ->
@@ -1133,6 +1291,48 @@ fun InspeccionPhotosApp() {
             Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
             singleMoveFolderId = null
         }
+    }
+    copyFolderId?.let { id ->
+        DestinationFolderPicker(
+            roots = folders, palette = palette, title = "Copiar carpeta en",
+            excludedId = null, includeRoot = true,
+            onDismiss = { copyFolderId = null },
+            onChoose = { destination ->
+                InspectionTree.find(folders, id)?.let { copyFolderTo(it, destination) }
+                copyFolderId = null
+            }
+        )
+    }
+
+    photoTransferPath?.let { path ->
+        val sourceId = photoTransferFolderId
+        if (sourceId != null) {
+            DestinationFolderPicker(
+                roots = folders, palette = palette,
+                title = if (photoTransferCopy) "Copiar foto en" else "Mover foto a",
+                includeRoot = false, excludedId = null,
+                onDismiss = { photoTransferPath = null; photoTransferFolderId = null },
+                onChoose = { destination ->
+                    if (destination != null) transferPhoto(sourceId, path, destination, photoTransferCopy)
+                    photoTransferPath = null; photoTransferFolderId = null
+                }
+            )
+        }
+    }
+
+    if (cameraSettingsVisible) {
+        CameraCaptureSettingsDialog(
+            palette = palette,
+            addPhotoAction = addPhotoAction,
+            editorPromptMode = editorPromptMode,
+            sessionMode = cameraSessionMode,
+            askPhotoConfirmation = askPhotoConfirmation,
+            onDismiss = { cameraSettingsVisible = false },
+            onAddPhotoActionChange = { addPhotoAction = it; prefs.addPhotoAction = it },
+            onEditorPromptModeChange = { editorPromptMode = it; prefs.editorPromptMode = it },
+            onSessionModeChange = { cameraSessionMode = it; prefs.cameraSessionMode = it },
+            onConfirmationChange = { askPhotoConfirmation = it; prefs.askPhotoConfirmation = it }
+        )
     }
 
     inputDialog?.let { state -> LegacyInputDialog(state) { inputDialog = null } }
