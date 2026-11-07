@@ -89,7 +89,8 @@ object CustomReportExporter {
             val hasTable = folder.reportTableEnabled && folder.reportTableVisible && folder.reportTableValues.any { row -> row.any { it.isNotBlank() } }
             val hasPhotos = folder.photos.isNotEmpty()
             val hasSections = folder.reportSectionVisible && cfg.sections.isNotEmpty() && folder.reportSectionValues.values.any { it.isNotBlank() }
-            val hasDirectContent = hasImage || hasTable || hasPhotos || hasSections
+            val hasDirectContent = hasImage || hasTable || hasPhotos || hasSections ||
+                folder.generalObs.isNotBlank()
 
             // Do not create empty route bands for structural-only folders.
             if (hasDirectContent) {

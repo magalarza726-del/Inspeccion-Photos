@@ -633,9 +633,14 @@ fun InspeccionPhotosApp() {
     }
 
     fun deleteFilesRecursive(folder: Inspection) {
+        // Una foto enviada antes a la Papelera puede seguir físicamente dentro de
+        // esta carpeta. Nunca eliminar su contenedor mientras tenga fotos recuperables.
         folder.photos.forEach(mediaStore::deletePhoto)
         folder.children.forEach(::deleteFilesRecursive)
-        mediaStore.deleteInspectionFiles(folder.id)
+        val containsRecoverablePhotos = trashStore.load().any {
+            it.type == TrashType.PHOTO && it.parentId == folder.id
+        }
+        if (!containsRecoverablePhotos) mediaStore.deleteInspectionFiles(folder.id)
     }
 
     fun requestDeleteFolder(folder: Inspection) {
@@ -866,7 +871,13 @@ fun InspeccionPhotosApp() {
                 put("originalPath", photo.originalPath)
             }.toString()
             sendToTrash(TrashType.PHOTO, photo.name, payload, folderId)
-            updateFolder(folderId) { it.copy(photos = it.photos.filterNot { p -> p.path == photo.path }) }
+            updateFolder(folderId) {
+                it.copy(
+                    photos = it.photos.filterNot { p -> p.path == photo.path },
+                    mainPhotoPath = if (it.mainPhotoPath == photo.path) "" else it.mainPhotoPath,
+                    reportMainImagePath = if (it.mainPhotoPath == photo.path) "" else it.reportMainImagePath
+                )
+            }
         }
     }
 
