@@ -60,6 +60,7 @@ fun HierarchyRootScreen(
     onExport: (Inspection) -> Unit,
     onDelete: (Inspection) -> Unit,
     onFolderMenu: (Inspection) -> Unit = {},
+    onImportZip: () -> Unit = {},
     sortMode: String = "Fecha de creación",
     onSortChange: (String) -> Unit = {}
 ) {
@@ -128,6 +129,12 @@ fun HierarchyRootScreen(
                     )
                     Spacer(Modifier.width(8.dp))
                     LegacyIconActionButton("⇅", palette) { showRootSort = true }
+                    Spacer(Modifier.width(6.dp))
+                    IconButton(onClick = onImportZip) {
+                        Icon(painterResource(R.drawable.ic_download_original),
+                            contentDescription = "Importar respaldo ZIP",
+                            tint = palette.blue)
+                    }
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {

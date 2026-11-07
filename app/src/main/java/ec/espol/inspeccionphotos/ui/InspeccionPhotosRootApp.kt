@@ -934,6 +934,11 @@ fun InspeccionPhotosApp() {
                         onExport = ::exportFolder,
                         onDelete = ::requestDeleteFolder,
                         onFolderMenu = ::showFolderMoreMenu,
+                        onImportZip = {
+                            zipImportLauncher.launch(
+                                arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")
+                            )
+                        },
                         sortMode = prefs.folderSort("_root_").also { sortRevision },
                         onSortChange = { prefs.setFolderSort("_root_", it); sortRevision++ }
                     )
