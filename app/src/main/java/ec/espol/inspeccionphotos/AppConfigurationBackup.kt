@@ -17,7 +17,7 @@ import java.io.File
 class AppConfigurationBackup(private val context: Context) {
     companion object {
         private const val SCHEMA = "inspeccion-photos.app-configuration"
-        private const val VERSION = 1
+        private const val VERSION = 2
         private const val LEGACY_PREFS = "inspeccion_photos_prefs"
         private const val SPATIAL_PREFS = "inspeccion_photos_settings_v2"
 
@@ -36,6 +36,7 @@ class AppConfigurationBackup(private val context: Context) {
 
     private val reportStore = CustomReportConfigStore(context)
     private val formStore = FormTemplateStore(context)
+    private val photoPresetStore = PhotoReportPresetStore(context, reportStore)
 
     fun exportToUri(uri: Uri) {
         val root = JSONObject().apply {
@@ -48,6 +49,15 @@ class AppConfigurationBackup(private val context: Context) {
             })
             put("pdfLogo", pdfLogoToJson())
             put("customReport", reportStore.toPortableJson())
+            put("photoPresets", JSONArray(photoPresetStore.load().map { preset ->
+                JSONObject().apply {
+                    put("id", preset.id)
+                    put("name", preset.name)
+                    put("createdAt", preset.createdAt)
+                    put("updatedAt", preset.updatedAt)
+                    put("config", reportStore.toPortableJson(preset.config))
+                }
+            }))
             put("formTemplates", formStore.toPortableTemplatesJson())
             put("notes", JSONObject().apply {
                 put("projectsIncluded", false)
@@ -96,7 +106,31 @@ class AppConfigurationBackup(private val context: Context) {
             .apply()
 
         val logoRestored = restorePdfLogo(logo, logoBytes)
-        reportStore.importPortableJson(customReportJson)
+        val legacyConfig = reportStore.importPortableJson(customReportJson)
+        val photoPresetsJson = root.optJSONArray("photoPresets")
+        val restoredPresets = if (photoPresetsJson != null && photoPresetsJson.length() > 0) {
+            List(photoPresetsJson.length()) { index ->
+                val obj = photoPresetsJson.getJSONObject(index)
+                PhotoReportPreset(
+                    id = obj.optString("id").ifBlank { java.util.UUID.randomUUID().toString() },
+                    name = obj.optString("name").ifBlank { "Reporte fotográfico" },
+                    config = reportStore.fromPortableJson(
+                        obj.optJSONObject("config") ?: error("Formato de foto incompleto")
+                    ),
+                    createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+                    updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
+                )
+            }
+        } else {
+            listOf(photoPresetStore.newPreset("Reporte fotográfico 1", legacyConfig))
+        }
+        photoPresetStore.save(restoredPresets)
+        val prefs = context.getSharedPreferences(LEGACY_PREFS, Context.MODE_PRIVATE)
+        val activeId = prefs.getString("active_photo_preset_id", "").orEmpty()
+            .takeIf { id -> restoredPresets.any { it.id == id } }
+            ?: restoredPresets.first().id
+        prefs.edit().putString("active_photo_preset_id", activeId).apply()
+        reportStore.save(restoredPresets.first { it.id == activeId }.config)
         val importedTemplates = formStore.importPortableTemplatesJson(templatesJson, preserveIds = true)
         formStore.saveTemplates(importedTemplates)
 
