@@ -5,7 +5,7 @@ import android.net.Uri
 import ec.espol.inspeccionphotos.FolderViewMode
 import java.io.File
 
-enum class AddPhotoAction { ASK, CAMERA_DIRECT }
+enum class AddPhotoAction { ASK, CAMERA_DIRECT, ATTACH }
 enum class EditorPromptMode { ASK_AFTER_CAPTURE, NEVER_ASK }
 enum class CameraSessionMode { ONE_BY_ONE, BATCH }
 
@@ -31,9 +31,18 @@ class LegacyUiPreferences(private val context: Context) {
         get() = prefs.getBoolean("show_ot", true)
         set(value) { prefs.edit().putBoolean("show_ot", value).apply() }
 
+    var defaultPhotoReport: String
+        get() = prefs.getString("default_photo_report", "PDF 3").orEmpty()
+        set(value) { prefs.edit().putString("default_photo_report", value).apply() }
+
+    fun folderSort(id: String): String = prefs.getString("folder_sort_$id", "Fecha de creación").orEmpty()
+    fun photoSort(id: String): String = prefs.getString("photo_sort_$id", "Fecha de creación").orEmpty()
+    fun setFolderSort(id: String, value: String) { prefs.edit().putString("folder_sort_$id", value).apply() }
+    fun setPhotoSort(id: String, value: String) { prefs.edit().putString("photo_sort_$id", value).apply() }
+
     var rootViewMode: FolderViewMode
-        get() = runCatching { FolderViewMode.valueOf(prefs.getString("root_view_mode", FolderViewMode.LIST.name).orEmpty()) }
-            .getOrDefault(FolderViewMode.LIST)
+        get() = runCatching { FolderViewMode.valueOf(prefs.getString("root_view_mode", FolderViewMode.GALLERY.name).orEmpty()) }
+            .getOrDefault(FolderViewMode.GALLERY)
         set(value) { prefs.edit().putString("root_view_mode", value.name).apply() }
 
     var addPhotoAction: AddPhotoAction
