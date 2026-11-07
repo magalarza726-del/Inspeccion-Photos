@@ -66,6 +66,7 @@ class InspectionRepository(private val context: Context) {
         put("reportTableEnabled", folder.reportTableEnabled)
         put("reportTableValues", JSONArray().apply { folder.reportTableValues.forEach { row -> put(JSONArray(row)) } })
         put("reportSectionValues", JSONObject(folder.reportSectionValues))
+        put("reportSectionTitles", JSONObject(folder.reportSectionTitles))
         put("photos", JSONArray().apply { folder.photos.forEach { put(photoToJson(it)) } })
         put("children", JSONArray().apply { folder.children.forEach { put(folderToJson(it)) } })
     }

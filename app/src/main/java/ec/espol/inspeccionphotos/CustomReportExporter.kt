@@ -111,7 +111,9 @@ object CustomReportExporter {
                     cfg.sections.forEach { section ->
                         val sectionH = 22f + section.lines.size * 27f
                         ensure(sectionH + 8f)
-                        y = drawSectionBlock(canvas, section, folder.reportSectionValues, margin, y, pw - 2f * margin, body, bold, border)
+                        y = drawSectionBlock(canvas, section.copy(
+                            title = folder.reportSectionTitles[section.id]?.takeIf { it.isNotBlank() } ?: section.title
+                        ), folder.reportSectionValues, margin, y, pw - 2f * margin, body, bold, border)
                         y += 7f
                     }
                 }
@@ -181,6 +183,19 @@ object CustomReportExporter {
                         y = drawSectionBlock(canvas, section, folder.reportSectionValues, margin, y, pw - 2f * margin, body, bold, border)
                         y += 7f
                     }
+                }
+
+                if (folder.generalObs.isNotBlank()) {
+                    ensure(28f)
+                    canvas.drawText("Observación general", margin + 5f, y + 12f, bold)
+                    y += 19f
+                    folder.generalObs.trim().chunked(95).take(40).forEach { observationLine ->
+                        ensure(13f)
+                        drawFittedLeft(canvas, observationLine, margin + 5f,
+                            y + 9f, pw - 2f * margin - 10f, body, 6.8f)
+                        y += 13f
+                    }
+                    y += 7f
                 }
 
                 if (hasPhotos) {
@@ -710,7 +725,7 @@ object CustomReportExporter {
     fun createStructureManifest(root:Inspection):String {
         fun node(f:Inspection):JSONObject=JSONObject().apply {
             put("id", f.id); put("name", f.name); put("created", f.created); put("ot", f.ot)
-            put("generalObs", f.generalObs); put("collapsed", f.collapsed)
+            put("generalObs", f.generalObs); put("reportSectionTitles", JSONObject(f.reportSectionTitles)); put("collapsed", f.collapsed)
             put("viewMode", f.viewMode.name); put("allowPhotos", f.allowPhotos); put("allowSubfolders", f.allowSubfolders)
             put("reportTableEnabled", f.reportTableEnabled)
             put("reportTableValues", org.json.JSONArray().apply { f.reportTableValues.forEach { put(org.json.JSONArray(it)) } })

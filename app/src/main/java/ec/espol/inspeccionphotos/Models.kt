@@ -29,6 +29,7 @@ data class Inspection(
     val reportTableValues: List<List<String>> = emptyList(),
     /** Valores capturados para las secciones configuradas en el Panel de Control, indexados por id de celda. */
     val reportSectionValues: Map<String, String> = emptyMap(),
+    val reportSectionTitles: Map<String, String> = emptyMap(),
     val createdAtMillis: Long = System.currentTimeMillis(),
     val modifiedAtMillis: Long = createdAtMillis,
     val mainPhotoPath: String = "",

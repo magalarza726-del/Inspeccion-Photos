@@ -164,6 +164,7 @@ fun InspeccionPhotosApp() {
     var folderToolsId by remember { mutableStateOf<String?>(null) }
     var folderSortPickerId by remember { mutableStateOf<String?>(null) }
     var folderPreviewId by remember { mutableStateOf<String?>(null) }
+    var sectionHeadingFolderId by remember { mutableStateOf<String?>(null) }
     var copyFolderId by remember { mutableStateOf<String?>(null) }
     var cameraSettingsVisible by remember { mutableStateOf(false) }
     var advancedSettingsVisible by remember { mutableStateOf(false) }
@@ -1368,11 +1369,37 @@ fun InspeccionPhotosApp() {
                 onDismiss = { folderPreviewId = null },
                 onEditTable = { tableEditorFolderId = id },
                 onEditSections = { sectionEditorFolderId = id },
+                onEditSectionHeading = { sectionHeadingFolderId = id },
                 onEditMainImage = { mainImageFolderId = id },
                 onEditObservation = { editGeneralObservation(folder) },
                 onToggleTable = { updateFolder(id) { it.copy(reportTableVisible = !it.reportTableVisible) } },
                 onToggleMainImage = { updateFolder(id) { it.copy(reportMainImageVisible = !it.reportMainImageVisible) } },
                 onToggleSections = { updateFolder(id) { it.copy(reportSectionVisible = !it.reportSectionVisible) } }
+            )
+        }
+    }
+
+    sectionHeadingFolderId?.let { id ->
+        val folder = InspectionTree.find(folders, id)
+        if (folder != null) {
+            LegacyMenuDialog(
+                title = "Elegir encabezado",
+                options = reportConfig.sections.map { section ->
+                    section.title to {
+                        inputDialog = LegacyInputState(
+                            "Editar encabezado de sección",
+                            "Título",
+                            folder.reportSectionTitles[section.id] ?: section.title
+                        ) { newTitle ->
+                            updateFolder(id) { current ->
+                                current.copy(reportSectionTitles = current.reportSectionTitles +
+                                    (section.id to newTitle.trim().take(120)))
+                            }
+                        }
+                    }
+                },
+                onDismiss = { sectionHeadingFolderId = null },
+                palette = palette
             )
         }
     }

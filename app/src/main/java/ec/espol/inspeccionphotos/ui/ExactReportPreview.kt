@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -86,6 +88,7 @@ fun FolderSectionPreviewDialog(
     onDismiss: () -> Unit,
     onEditTable: () -> Unit,
     onEditSections: () -> Unit,
+    onEditSectionHeading: () -> Unit,
     onEditMainImage: () -> Unit,
     onEditObservation: () -> Unit,
     onToggleTable: () -> Unit,
@@ -105,10 +108,12 @@ fun FolderSectionPreviewDialog(
                     }
                     TextButton(onClick = { showMenu = true }) { Text("⋮", fontSize = 25.sp) }
                 }
-                Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp),
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     TextButton(onClick = onEditTable) { Text("Tabla", fontSize = 11.sp) }
                     TextButton(onClick = onEditSections) { Text("Sección", fontSize = 11.sp) }
+                    TextButton(onClick = onEditSectionHeading) { Text("Encabezado", fontSize = 11.sp) }
                     TextButton(onClick = onEditMainImage) { Text("Imagen", fontSize = 11.sp) }
                     TextButton(onClick = onEditObservation) { Text("Observación", fontSize = 11.sp) }
                 }
