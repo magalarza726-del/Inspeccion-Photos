@@ -85,10 +85,10 @@ object CustomReportExporter {
         newPage()
 
         fun drawFolder(folder: Inspection, route: String) {
-            val hasImage = folder.reportMainImagePath.isNotBlank() && File(folder.reportMainImagePath).exists()
-            val hasTable = folder.reportTableEnabled
+            val hasImage = folder.reportMainImageVisible && folder.reportMainImagePath.isNotBlank() && File(folder.reportMainImagePath).exists()
+            val hasTable = folder.reportTableEnabled && folder.reportTableVisible && folder.reportTableValues.any { row -> row.any { it.isNotBlank() } }
             val hasPhotos = folder.photos.isNotEmpty()
-            val hasSections = cfg.sections.isNotEmpty()
+            val hasSections = folder.reportSectionVisible && cfg.sections.isNotEmpty() && folder.reportSectionValues.values.any { it.isNotBlank() }
             val hasDirectContent = hasImage || hasTable || hasPhotos || hasSections
 
             // Do not create empty route bands for structural-only folders.

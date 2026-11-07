@@ -57,6 +57,12 @@ class InspectionRepository(private val context: Context) {
         put("viewMode", folder.viewMode.name)
         put("collapsed", folder.collapsed)
         put("reportMainImagePath", folder.reportMainImagePath)
+        put("mainPhotoPath", folder.mainPhotoPath)
+        put("reportTableVisible", folder.reportTableVisible)
+        put("reportMainImageVisible", folder.reportMainImageVisible)
+        put("reportSectionVisible", folder.reportSectionVisible)
+        put("createdAtMillis", folder.createdAtMillis)
+        put("modifiedAtMillis", folder.modifiedAtMillis)
         put("reportTableEnabled", folder.reportTableEnabled)
         put("reportTableValues", JSONArray().apply { folder.reportTableValues.forEach { row -> put(JSONArray(row)) } })
         put("reportSectionValues", JSONObject(folder.reportSectionValues))
@@ -69,6 +75,8 @@ class InspectionRepository(private val context: Context) {
         .put("path", photo.path)
         .put("observation", photo.observation)
         .put("originalPath", photo.originalPath)
+        .put("createdAtMillis", photo.createdAtMillis)
+        .put("modifiedAtMillis", photo.modifiedAtMillis)
 
     private fun decode(text: String): List<Inspection> {
         val trimmed = text.trim()
@@ -135,6 +143,14 @@ class InspectionRepository(private val context: Context) {
             viewMode = runCatching { FolderViewMode.valueOf(json.optString("viewMode", "GALLERY")) }.getOrDefault(FolderViewMode.GALLERY),
             collapsed = json.optBoolean("collapsed", false),
             reportMainImagePath = json.optString("reportMainImagePath"),
+            mainPhotoPath = json.optString("mainPhotoPath"),
+            reportTableVisible = json.optBoolean("reportTableVisible", true),
+            reportMainImageVisible = json.optBoolean("reportMainImageVisible", true),
+            reportSectionVisible = json.optBoolean("reportSectionVisible", true),
+            createdAtMillis = json.optLong("createdAtMillis", runCatching {
+                java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).parse(created)?.time
+            }.getOrNull() ?: System.currentTimeMillis()),
+            modifiedAtMillis = json.optLong("modifiedAtMillis", System.currentTimeMillis()),
             reportTableEnabled = if (json.has("reportTableEnabled")) json.optBoolean("reportTableEnabled", false) else {
                 val old = decodeTable(json.optJSONArray("reportTableValues")); old.isNotEmpty()
             },
@@ -155,7 +171,9 @@ class InspectionRepository(private val context: Context) {
                         name = p.optString("name"),
                         path = p.optString("path"),
                         observation = p.optString("observation"),
-                        originalPath = p.optString("originalPath")
+                        originalPath = p.optString("originalPath"),
+                        createdAtMillis = p.optLong("createdAtMillis", File(p.optString("path")).lastModified().takeIf { it > 0L } ?: System.currentTimeMillis()),
+                        modifiedAtMillis = p.optLong("modifiedAtMillis", File(p.optString("path")).lastModified().takeIf { it > 0L } ?: System.currentTimeMillis())
                     )
                 )
             }

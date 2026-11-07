@@ -28,7 +28,13 @@ data class Inspection(
     /** Valores de tabla por filas; la forma visible la define el Panel de Control. */
     val reportTableValues: List<List<String>> = emptyList(),
     /** Valores capturados para las secciones configuradas en el Panel de Control, indexados por id de celda. */
-    val reportSectionValues: Map<String, String> = emptyMap()
+    val reportSectionValues: Map<String, String> = emptyMap(),
+    val createdAtMillis: Long = System.currentTimeMillis(),
+    val modifiedAtMillis: Long = createdAtMillis,
+    val mainPhotoPath: String = "",
+    val reportTableVisible: Boolean = true,
+    val reportMainImageVisible: Boolean = true,
+    val reportSectionVisible: Boolean = true
 )
 
 /** Formato histórico de "códigos" del APK original. Se migra a [Inspection.children]. */
@@ -43,5 +49,7 @@ data class PhotoItem(
     val path: String,
     val observation: String = "",
     /** Copia de seguridad del archivo original cuando se guarda una edición. */
-    val originalPath: String = ""
+    val originalPath: String = "",
+    val createdAtMillis: Long = System.currentTimeMillis(),
+    val modifiedAtMillis: Long = createdAtMillis
 )

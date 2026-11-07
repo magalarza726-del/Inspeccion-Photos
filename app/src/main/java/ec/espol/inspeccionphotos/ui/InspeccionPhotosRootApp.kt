@@ -265,14 +265,16 @@ fun InspeccionPhotosApp() {
     }
 
     fun updateFolder(id: String, transform: (Inspection) -> Inspection) {
-        persist(InspectionTree.update(folders, id, transform))
+        persist(InspectionTree.update(folders, id) { transform(it).copy(modifiedAtMillis = System.currentTimeMillis()) })
     }
 
     fun selectedFolder(): Inspection? = InspectionTree.find(folders, selectedFolderId)
 
     fun updatePhoto(folderId: String, photoPath: String, transform: (PhotoItem) -> PhotoItem) {
         updateFolder(folderId) { folder ->
-            folder.copy(photos = folder.photos.map { if (it.path == photoPath) transform(it) else it })
+            folder.copy(photos = folder.photos.map {
+                if (it.path == photoPath) transform(it).copy(modifiedAtMillis = System.currentTimeMillis()) else it
+            })
         }
     }
 
