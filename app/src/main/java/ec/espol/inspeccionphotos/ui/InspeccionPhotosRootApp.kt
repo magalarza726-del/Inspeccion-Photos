@@ -1221,6 +1221,7 @@ fun InspeccionPhotosApp() {
                 palette = palette,
                 compact = compact,
                 developerMode = developerModeEnabled,
+                driveOnly = true,
                 darkMode = darkMode,
                 spatialFunctionsEnabled = spatialFunctionsEnabled,
                 showOt = showOt,
@@ -1293,7 +1294,14 @@ fun InspeccionPhotosApp() {
                             )
                         }
                     },
-                    onAdvanced = { advancedSettingsVisible = true }
+                    onAdvanced = { advancedSettingsVisible = true },
+                    onExportConfiguration = {
+                        val stamp = SimpleDateFormat("yyyy-MM-dd_HHmm", Locale.getDefault()).format(Date())
+                        configurationExportLauncher.launch("Inspeccion_Photos_configuracion_$stamp.json")
+                    },
+                    onImportConfiguration = {
+                        configurationImportLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
+                    }
                 )
             }
         }
@@ -1449,7 +1457,8 @@ fun InspeccionPhotosApp() {
                     "Herramientas de carpeta" to { folderToolsId = id },
                     "Vista previa de esta sección" to { folderPreviewId = id },
                     "Compartir rápido" to { shareQuick(folder) },
-                    "Compartir completo" to { exportFolder(folder) }
+                    "Compartir completo" to { exportFolder(folder) },
+                    "Configuración de cámara" to { cameraSettingsVisible = true }
                 ),
                 onDismiss = { folderMoreMenuId = null },
                 palette = palette
