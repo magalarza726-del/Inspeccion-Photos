@@ -813,15 +813,9 @@ fun FolderConfigurationDialog(
                 SettingSwitchRow("Permitir fotos", "Tomar o importar fotografías en este nivel.", allowPhotos, palette) { allowPhotos = it }
                 Spacer(Modifier.height(8.dp))
                 SettingSwitchRow("Permitir subcarpetas", "Crear otro nivel dentro de esta carpeta.", allowSubfolders, palette) { allowSubfolders = it }
-                Spacer(Modifier.height(12.dp))
-                Text("Vista del contenido", color = palette.text, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(7.dp))
-                LegacySegmentedChoice(listOf("Galería", "Lista"), if (viewMode == FolderViewMode.GALLERY) "Galería" else "Lista", palette) {
-                    viewMode = if (it == "Galería") FolderViewMode.GALLERY else FolderViewMode.LIST
-                }
             }
         },
-        confirmButton = { TextButton(onClick = { onDismiss(); onSave(allowPhotos, allowSubfolders, viewMode) }) { Text("Guardar", color = palette.blue) } },
+        confirmButton = { TextButton(onClick = { onDismiss(); onSave(allowPhotos, allowSubfolders, FolderViewMode.GALLERY) }) { Text("Guardar", color = palette.blue) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar", color = palette.muted) } }
     )
 }

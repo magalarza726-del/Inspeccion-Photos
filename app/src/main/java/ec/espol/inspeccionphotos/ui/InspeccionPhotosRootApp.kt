@@ -166,6 +166,7 @@ fun InspeccionPhotosApp() {
     var folderPreviewId by remember { mutableStateOf<String?>(null) }
     var sectionHeadingFolderId by remember { mutableStateOf<String?>(null) }
     var copyFolderId by remember { mutableStateOf<String?>(null) }
+    var cloneFolderId by remember { mutableStateOf<String?>(null) }
     var cameraSettingsVisible by remember { mutableStateOf(false) }
     var advancedSettingsVisible by remember { mutableStateOf(false) }
     var sortRevision by remember { mutableIntStateOf(0) }
@@ -609,6 +610,26 @@ fun InspeccionPhotosApp() {
     fun sendToTrash(type: TrashType, name: String, payload: String, parentId: String? = null) {
         trashStore.put(type, name, payload, parentId)
         trashEntries = trashStore.load()
+    }
+
+    fun cloneStructureTo(source: Inspection, destinationId: String?) {
+        val target = destinationId?.let { InspectionTree.find(folders, it) }
+        val destinationDepth = destinationId?.let { InspectionTree.depth(folders, it) } ?: -1
+        if (destinationDepth + 1 + InspectionTree.subtreeDepth(source) > InspectionTree.MAX_SUBFOLDER_LEVELS ||
+            (destinationId != null && target?.allowSubfolders != true)) {
+            Toast.makeText(context, "La estructura no cabe en este destino", Toast.LENGTH_LONG).show()
+            return
+        }
+        val siblings = target?.children ?: folders
+        val base = "${source.name} - Estructura"
+        var title = base
+        var number = 2
+        while (siblings.any { it.name.equals(title, true) }) {
+            title = "$base ($number)"
+            number++
+        }
+        persist(InspectionTree.insert(folders, destinationId, cloneStructureNode(source, title)))
+        Toast.makeText(context, "Estructura clonada", Toast.LENGTH_SHORT).show()
     }
 
     fun deleteFilesRecursive(folder: Inspection) {
@@ -1426,7 +1447,7 @@ fun InspeccionPhotosApp() {
                 title = "Herramientas de carpeta",
                 options = listOf(
                     "Ordenar por" to { folderSortPickerId = id },
-                    "Clonar estructura en" to { cloneStructure(folder) },
+                    "Clonar estructura en" to { cloneFolderId = id },
                     "Mover a" to { singleMoveFolderId = id },
                     "Copiar en" to { copyFolderId = id },
                     "Cambiar nombre" to { renameFolder(folder) },
@@ -1514,12 +1535,29 @@ fun InspeccionPhotosApp() {
     }
 
     singleMoveFolderId?.let { id ->
-        MoveSingleFolderDialog(folders, id, palette, { singleMoveFolderId = null }) { destination ->
-            val result = InspectionTree.move(folders, setOf(id), destination)
-            if (result.moved) persist(result.nodes)
-            Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
-            singleMoveFolderId = null
-        }
+        DestinationFolderPicker(
+            roots = folders, palette = palette, title = "Mover carpeta a",
+            excludedId = id, includeRoot = true,
+            onDismiss = { singleMoveFolderId = null },
+            onChoose = { destination ->
+                val result = InspectionTree.move(folders, setOf(id), destination)
+                if (result.moved) persist(result.nodes)
+                Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
+                singleMoveFolderId = null
+            }
+        )
+    }
+
+    cloneFolderId?.let { id ->
+        DestinationFolderPicker(
+            roots = folders, palette = palette, title = "Clonar estructura en",
+            excludedId = null, includeRoot = true,
+            onDismiss = { cloneFolderId = null },
+            onChoose = { destination ->
+                InspectionTree.find(folders, id)?.let { cloneStructureTo(it, destination) }
+                cloneFolderId = null
+            }
+        )
     }
     copyFolderId?.let { id ->
         DestinationFolderPicker(
@@ -1539,7 +1577,7 @@ fun InspeccionPhotosApp() {
             DestinationFolderPicker(
                 roots = folders, palette = palette,
                 title = if (photoTransferCopy) "Copiar foto en" else "Mover foto a",
-                includeRoot = false, excludedId = null,
+                includeRoot = false, excludedId = null, requirePhotos = true,
                 onDismiss = { photoTransferPath = null; photoTransferFolderId = null },
                 onChoose = { destination ->
                     if (destination != null) transferPhoto(sourceId, path, destination, photoTransferCopy)

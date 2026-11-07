@@ -28,6 +28,7 @@ fun DestinationFolderPicker(
     title: String,
     excludedId: String?,
     includeRoot: Boolean,
+    requirePhotos: Boolean = false,
     onDismiss: () -> Unit,
     onChoose: (String?) -> Unit
 ) {
@@ -82,7 +83,9 @@ fun DestinationFolderPicker(
         confirmButton = {
             Button(
                 enabled = (includeRoot || currentId != null) && (currentId == null ||
-                    (currentId != excludedId && InspectionTree.find(roots, currentId)?.allowSubfolders != false)),
+                    (currentId != excludedId && InspectionTree.find(roots, currentId)?.let {
+                        if (requirePhotos) it.allowPhotos else it.allowSubfolders
+                    } == true)),
                 onClick = { onChoose(currentId) }
             ) { Text("Elegir esta carpeta") }
         },
