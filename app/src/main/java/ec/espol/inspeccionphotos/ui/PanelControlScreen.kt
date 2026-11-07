@@ -39,7 +39,8 @@ fun PanelControlScreen(
     formTemplates: List<FormTemplate>,
     formStore: FormTemplateStore,
     onConfigChange: (CustomReportConfig) -> Unit,
-    onFormTemplatesChange: (List<FormTemplate>) -> Unit
+    onFormTemplatesChange: (List<FormTemplate>) -> Unit,
+    onTemplateTrash: (FormTemplate) -> Unit = {}
 ) {
     val context = LocalContext.current
     var panelTab by rememberSaveable { mutableStateOf("Fotos") }
@@ -305,7 +306,8 @@ fun PanelControlScreen(
                     compact = compact,
                     templates = formTemplates,
                     store = formStore,
-                    onTemplatesChange = onFormTemplatesChange
+                    onTemplatesChange = onFormTemplatesChange,
+                    onMoveToTrash = onTemplateTrash
                 )
             }
         }

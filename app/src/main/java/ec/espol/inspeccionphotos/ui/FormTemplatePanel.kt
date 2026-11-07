@@ -36,7 +36,8 @@ fun FormTemplateManager(
     compact: Boolean,
     templates: List<FormTemplate>,
     store: FormTemplateStore,
-    onTemplatesChange: (List<FormTemplate>) -> Unit
+    onTemplatesChange: (List<FormTemplate>) -> Unit,
+    onMoveToTrash: (FormTemplate) -> Unit = {}
 ) {
     val context = LocalContext.current
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -197,9 +198,10 @@ fun FormTemplateManager(
             text = { Text("¿Eliminar '${template.name}'? Los formularios ya llenados conservan una copia del formato usado.") },
             confirmButton = {
                 TextButton(onClick = {
+                    onMoveToTrash(template)
                     onTemplatesChange(templates.filterNot { it.id == template.id })
                     deleteCandidate = null
-                }) { Text("Eliminar") }
+                }) { Text("Mover a papelera") }
             },
             dismissButton = { TextButton(onClick = { deleteCandidate = null }) { Text("Cancelar") } }
         )
