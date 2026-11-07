@@ -748,7 +748,12 @@ fun InspeccionPhotosApp() {
                         listOf(ExportUtils.createSpatialReportPdf(context, folder))
                     } else emptyList()
                     val customReports = if (selection.customReport) {
-                        CustomReportExporter.createAll(context, folder, reportConfig)
+                        CustomReportExporter.createAll(
+                            context, folder,
+                            photoPresets.firstOrNull {
+                                it.id == selection.customReportPresetId
+                            }?.config ?: reportConfig
+                        )
                     } else emptyList()
                     val zip = if (selection.photosAndStructure) {
                         val backup = repository.backupFile(folders)
@@ -1385,6 +1390,7 @@ fun InspeccionPhotosApp() {
         InspectionTree.find(folders, id)?.let { folder ->
             ExportSelectionDialog(
                 initial = prefs.exportSelection,
+                photoPresets = photoPresets,
                 hiddenLegacyPdfs = hiddenLegacyPdfs,
                 spatialFunctionsEnabled = spatialFunctionsEnabled,
                 palette = palette,

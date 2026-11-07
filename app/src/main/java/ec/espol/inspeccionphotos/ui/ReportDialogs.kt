@@ -1,6 +1,7 @@
 package ec.espol.inspeccionphotos.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -18,6 +19,7 @@ import ec.espol.inspeccionphotos.*
 @Composable
 fun ExportSelectionDialog(
     initial: ExportSelection,
+    photoPresets: List<PhotoReportPreset> = emptyList(),
     hiddenLegacyPdfs: Set<Int> = emptySet(),
     spatialFunctionsEnabled: Boolean = false,
     palette: LegacyPalette,
@@ -107,9 +109,24 @@ fun ExportSelectionDialog(
                 }
                 ExportCheck(
                     "Reporte personalizado",
-                    "Usa la plantilla definida en Panel de Control y sus formatos PDF/Word/Excel.",
+                    "Permite elegir cualquiera de los formatos fotográficos creados.",
                     value.customReport, palette
                 ) { value = value.copy(customReport = it) }
+                if (value.customReport && photoPresets.isNotEmpty()) {
+                    Text("Formato fotográfico", color = palette.text, fontWeight = FontWeight.SemiBold)
+                    val selectedId = value.customReportPresetId.takeIf { id ->
+                        photoPresets.any { it.id == id }
+                    } ?: photoPresets.first().id
+                    photoPresets.forEach { preset ->
+                        Row(Modifier.fillMaxWidth().clickable {
+                            value = value.copy(customReportPresetId = preset.id)
+                        }, verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = selectedId == preset.id,
+                                onClick = { value = value.copy(customReportPresetId = preset.id) })
+                            Text(preset.name, color = palette.text, fontSize = 12.sp)
+                        }
+                    }
+                }
                 Spacer(Modifier.height(6.dp))
                 Text("La selección queda guardada para la próxima exportación.", color = palette.muted, style = MaterialTheme.typography.bodySmall)
             }

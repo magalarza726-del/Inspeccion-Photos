@@ -54,7 +54,8 @@ data class ExportSelection(
     val standardReport: Boolean = true,
     val standardPdfColumns: Int = 3,
     val spatialReport: Boolean = false,
-    val customReport: Boolean = false
+    val customReport: Boolean = false,
+    val customReportPresetId: String = ""
 ) {
     fun normalized(): ExportSelection = copy(standardPdfColumns = standardPdfColumns.coerceIn(1, 4))
     fun anySelected(): Boolean = photosAndStructure || standardReport || spatialReport || customReport

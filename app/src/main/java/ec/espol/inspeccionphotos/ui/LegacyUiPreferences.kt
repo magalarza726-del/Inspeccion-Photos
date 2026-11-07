@@ -99,7 +99,8 @@ class LegacyUiPreferences(private val context: Context) {
             standardReport = prefs.getBoolean("export_standard_report", true),
             standardPdfColumns = prefs.getInt("export_standard_pdf_columns", 3).coerceIn(1, 4),
             spatialReport = prefs.getBoolean("export_spatial_report", false),
-            customReport = prefs.getBoolean("export_custom_report", false)
+            customReport = prefs.getBoolean("export_custom_report", false),
+            customReportPresetId = prefs.getString("export_custom_preset_id", "").orEmpty()
         )
         set(value) {
             prefs.edit()
@@ -108,6 +109,7 @@ class LegacyUiPreferences(private val context: Context) {
                 .putInt("export_standard_pdf_columns", value.standardPdfColumns.coerceIn(1, 4))
                 .putBoolean("export_spatial_report", value.spatialReport)
                 .putBoolean("export_custom_report", value.customReport)
+                .putString("export_custom_preset_id", value.customReportPresetId)
                 .apply()
         }
 
