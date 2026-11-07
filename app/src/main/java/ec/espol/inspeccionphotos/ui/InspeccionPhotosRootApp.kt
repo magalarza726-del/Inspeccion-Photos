@@ -65,6 +65,7 @@ fun InspeccionPhotosApp() {
     val mediaStore = remember { InspectionMediaStore(context) }
     val prefs = remember { LegacyUiPreferences(context) }
     val reportStore = remember { CustomReportConfigStore(context) }
+    val photoPresetStore = remember { PhotoReportPresetStore(context, reportStore) }
     val formStore = remember { FormTemplateStore(context) }
     val trashStore = remember { TrashStore(context) }
     var trashEntries by remember { mutableStateOf(trashStore.load()) }
@@ -95,7 +96,20 @@ fun InspeccionPhotosApp() {
     var hiddenLegacyPdfs by remember { mutableStateOf(prefs.hiddenLegacyPdfs) }
     var googleDriveConnected by remember { mutableStateOf(prefs.googleDriveConnected) }
     var googleDriveConnectedAt by remember { mutableStateOf(prefs.googleDriveConnectedAt) }
-    var reportConfig by remember { mutableStateOf(reportStore.load()) }
+    var photoPresets by remember {
+        mutableStateOf(photoPresetStore.load().also { photoPresetStore.save(it) })
+    }
+    var activePhotoPresetId by remember {
+        mutableStateOf(
+            prefs.activePhotoPresetId.takeIf { id -> photoPresets.any { it.id == id } }
+                ?: photoPresets.firstOrNull()?.id.orEmpty()
+        )
+    }
+    var defaultPhotoReport by remember { mutableStateOf(prefs.defaultPhotoReport) }
+    var defaultFormTemplateId by remember { mutableStateOf(prefs.defaultFormTemplateId) }
+    var reportConfig by remember {
+        mutableStateOf(photoPresets.firstOrNull { it.id == activePhotoPresetId }?.config ?: reportStore.load())
+    }
     var formTemplates by remember { mutableStateOf(formStore.loadTemplates()) }
     val palette = remember(darkMode) { legacyPalette(darkMode) }
     var latestLocation by remember { mutableStateOf<LocationSnapshot?>(null) }
@@ -622,9 +636,11 @@ fun InspeccionPhotosApp() {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     val option = prefs.defaultPhotoReport
-                    if (option == "Personalizado") {
-                        CustomReportExporter.createAll(context, folder,
-                            reportConfig.copy(exportFormats = setOf(ReportExportFormat.PDF))).first { it.extension.equals("pdf", true) }
+                    if (option == "Personalizado" || option.startsWith("Preset:")) {
+                        val presetConfig = photoPresets.firstOrNull {
+                            it.id == option.substringAfter("Preset:")
+                        }?.config ?: reportConfig
+                        CustomReportExporter.createPdf(context, folder, presetConfig)
                     } else {
                         val columns = option.substringAfter("PDF ").toIntOrNull()?.coerceIn(1, 4) ?: 3
                         ExportUtils.createObservationPdf(context, folder, columns)
@@ -961,12 +977,102 @@ fun InspeccionPhotosApp() {
                 }
             )
             LegacyRootSection.CONTROL_PANEL -> PanelControlScreen(
-                palette = palette, compact = compact, config = reportConfig, store = reportStore,
-                formTemplates = formTemplates, formStore = formStore,
-                onConfigChange = { updated -> reportConfig = updated.normalized(); reportStore.save(reportConfig) },
-                onFormTemplatesChange = { updated -> formTemplates = updated.map { it.normalized() }; formStore.saveTemplates(formTemplates) },
+                palette = palette,
+                compact = compact,
+                config = reportConfig,
+                store = reportStore,
+                formTemplates = formTemplates,
+                formStore = formStore,
+                onConfigChange = { updated ->
+                    reportConfig = updated.normalized()
+                    reportStore.save(reportConfig)
+                    photoPresets = photoPresets.map { preset ->
+                        if (preset.id == activePhotoPresetId)
+                            preset.copy(config = reportConfig, updatedAt = System.currentTimeMillis())
+                        else preset
+                    }
+                    photoPresetStore.save(photoPresets)
+                },
+                onFormTemplatesChange = { updated ->
+                    formTemplates = updated.map { it.normalized() }
+                    formStore.saveTemplates(formTemplates)
+                },
                 onTemplateTrash = { template ->
                     sendToTrash(TrashType.TEMPLATE, template.name, formStore.encodeTrashTemplate(template))
+                },
+                defaultFormTemplateId = defaultFormTemplateId,
+                onDefaultFormTemplateChange = { id ->
+                    defaultFormTemplateId = id
+                    prefs.defaultFormTemplateId = id
+                },
+                photoPresets = photoPresets,
+                activePhotoPresetId = activePhotoPresetId,
+                defaultPhotoReport = defaultPhotoReport,
+                onPhotoPresetSelect = { id ->
+                    photoPresets.firstOrNull { it.id == id }?.let { preset ->
+                        activePhotoPresetId = id
+                        prefs.activePhotoPresetId = id
+                        reportConfig = preset.config
+                    }
+                },
+                onPhotoPresetNew = {
+                    val preset = photoPresetStore.newPreset(
+                        "Reporte fotográfico ${photoPresets.size + 1}", reportConfig
+                    )
+                    photoPresets = photoPresets + preset
+                    photoPresetStore.save(photoPresets)
+                    activePhotoPresetId = preset.id
+                    prefs.activePhotoPresetId = preset.id
+                    reportConfig = preset.config
+                },
+                onPhotoPresetDuplicate = {
+                    photoPresets.firstOrNull { it.id == activePhotoPresetId }?.let { source ->
+                        val preset = photoPresetStore.newPreset("${source.name} - Copia", source.config)
+                        photoPresets = photoPresets + preset
+                        photoPresetStore.save(photoPresets)
+                        activePhotoPresetId = preset.id
+                        prefs.activePhotoPresetId = preset.id
+                        reportConfig = preset.config
+                    }
+                },
+                onPhotoPresetRename = {
+                    photoPresets.firstOrNull { it.id == activePhotoPresetId }?.let { preset ->
+                        inputDialog = LegacyInputState(
+                            "Renombrar formato", "Nombre", preset.name
+                        ) { raw ->
+                            val name = raw.trim().take(70)
+                            if (name.isNotEmpty()) {
+                                photoPresets = photoPresets.map {
+                                    if (it.id == preset.id) it.copy(name = name) else it
+                                }
+                                photoPresetStore.save(photoPresets)
+                            }
+                        }
+                    }
+                },
+                onPhotoPresetTrash = {
+                    if (photoPresets.size > 1) {
+                        photoPresets.firstOrNull { it.id == activePhotoPresetId }?.let { preset ->
+                            sendToTrash(
+                                TrashType.PHOTO_TEMPLATE, preset.name,
+                                photoPresetStore.encodePreset(preset)
+                            )
+                            photoPresets = photoPresets.filterNot { it.id == preset.id }
+                            photoPresetStore.save(photoPresets)
+                            val next = photoPresets.first()
+                            activePhotoPresetId = next.id
+                            prefs.activePhotoPresetId = next.id
+                            reportConfig = next.config
+                            if (defaultPhotoReport == "Preset:${preset.id}") {
+                                defaultPhotoReport = "PDF 3"
+                                prefs.defaultPhotoReport = "PDF 3"
+                            }
+                        }
+                    }
+                },
+                onDefaultPhotoReportChange = { option ->
+                    defaultPhotoReport = option
+                    prefs.defaultPhotoReport = option
                 }
             )
             LegacyRootSection.TRASH -> TrashScreen(
@@ -1010,6 +1116,13 @@ fun InspeccionPhotosApp() {
                                     if (formTemplates.none { it.id == template.id }) {
                                         formTemplates = formTemplates + template
                                         formStore.saveTemplates(formTemplates)
+                                    }
+                                }
+                                TrashType.PHOTO_TEMPLATE -> {
+                                    val preset = photoPresetStore.decodePreset(entry.payload)
+                                    if (photoPresets.none { it.id == preset.id }) {
+                                        photoPresets = photoPresets + preset
+                                        photoPresetStore.save(photoPresets)
                                     }
                                 }
                             }
