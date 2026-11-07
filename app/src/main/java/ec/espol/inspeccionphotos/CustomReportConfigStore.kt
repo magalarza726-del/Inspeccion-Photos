@@ -16,6 +16,10 @@ class CustomReportConfigStore(private val context: Context) {
         fromJson(JSONObject(configFile.readText()))
     }.getOrDefault(CustomReportConfig())
 
+    /** Serialización reutilizable de varias plantillas dentro del mismo dispositivo. */
+    fun encodeConfig(config: CustomReportConfig): JSONObject = toJson(config.normalized(), portable = false)
+    fun decodeConfig(json: JSONObject): CustomReportConfig = fromJson(json).normalized()
+
     fun save(config: CustomReportConfig) {
         configFile.writeText(toJson(config.normalized(), portable = false).toString(2))
     }
@@ -23,8 +27,9 @@ class CustomReportConfigStore(private val context: Context) {
     fun importHeaderImage(uri: Uri, side: String): String {
         val mime = context.contentResolver.getType(uri).orEmpty().lowercase()
         val ext = when { "png" in mime -> "png"; "webp" in mime -> "webp"; else -> "jpg" }
-        imageDir.listFiles()?.filter { it.name.startsWith("header_${side}.") }?.forEach { it.delete() }
-        val out = File(imageDir, "header_${side}.$ext")
+        // Cada formato necesita sus imágenes independientes. No sobrescribir el logo
+        // que utiliza otra plantilla fotográfica.
+        val out = File(imageDir, "header_${side}_${java.util.UUID.randomUUID()}.$ext")
         context.contentResolver.openInputStream(uri)?.use { input -> out.outputStream().use { input.copyTo(it, 256 * 1024) } }
             ?: error("No se pudo leer la imagen")
         require(out.length() > 0) { "La imagen está vacía" }
