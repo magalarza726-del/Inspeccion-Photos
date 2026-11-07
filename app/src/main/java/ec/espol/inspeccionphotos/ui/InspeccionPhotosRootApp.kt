@@ -166,6 +166,7 @@ fun InspeccionPhotosApp() {
     var folderPreviewId by remember { mutableStateOf<String?>(null) }
     var copyFolderId by remember { mutableStateOf<String?>(null) }
     var cameraSettingsVisible by remember { mutableStateOf(false) }
+    var advancedSettingsVisible by remember { mutableStateOf(false) }
     var sortRevision by remember { mutableIntStateOf(0) }
     var photoTransferFolderId by remember { mutableStateOf<String?>(null) }
     var photoTransferPath by remember { mutableStateOf<String?>(null) }
@@ -890,7 +891,7 @@ fun InspeccionPhotosApp() {
                 onForms = { rootSectionName = LegacyRootSection.FORMS.name },
                 onTrash = { rootSectionName = LegacyRootSection.TRASH.name },
                 onPanel = { rootSectionName = LegacyRootSection.CONTROL_PANEL.name },
-                onSettings = { rootSectionName = LegacyRootSection.SETTINGS.name },
+                onSettings = { advancedSettingsVisible = false; rootSectionName = LegacyRootSection.SETTINGS.name },
                 onSearch = { rootSectionName = LegacyRootSection.SEARCH.name }
             )
             LegacyRootSection.FOLDERS -> {
@@ -1172,7 +1173,13 @@ fun InspeccionPhotosApp() {
                 onOpenForm = { requestedFormId = it; rootSectionName = LegacyRootSection.FORMS.name },
                 onOpenFormats = { rootSectionName = LegacyRootSection.CONTROL_PANEL.name }
             )
-            LegacyRootSection.SETTINGS -> LegacySettingsScreen(
+            LegacyRootSection.SETTINGS -> if (advancedSettingsVisible) {
+                Column(Modifier.fillMaxSize()) {
+                    TextButton(onClick = { advancedSettingsVisible = false }) {
+                        Text("‹ Configuración básica")
+                    }
+                    Box(Modifier.weight(1f)) {
+                        LegacySettingsScreen(
                 palette = palette,
                 compact = compact,
                 developerMode = developerModeEnabled,
@@ -1220,7 +1227,37 @@ fun InspeccionPhotosApp() {
                 onImportAllConfiguration = {
                     configurationImportLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
                 }
-            )
+                        )
+                    }
+                }
+            } else {
+                SimpleAppSettingsScreen(
+                    palette = palette,
+                    darkMode = darkMode,
+                    companyName = companyName,
+                    logoConfigured = pdfLogoPath.isNotBlank() && File(pdfLogoPath).exists(),
+                    developerMode = developerModeEnabled,
+                    spatialFunctionsEnabled = spatialFunctionsEnabled,
+                    onDarkModeChange = { darkMode = it; prefs.darkMode = it },
+                    onCompanyNameChange = {
+                        companyName = it.trim()
+                        prefs.companyName = companyName
+                        Toast.makeText(context, "Nombre de empresa guardado", Toast.LENGTH_SHORT).show()
+                    },
+                    onChooseLogo = { pdfLogoPickerLauncher.launch("image/*") },
+                    onClearLogo = { prefs.clearPdfLogo(); pdfLogoPath = "" },
+                    onSpatialChange = { enabled ->
+                        spatialFunctionsEnabled = enabled
+                        prefs.spatialFunctionsEnabled = enabled
+                        if (enabled && !locationPermissionGranted) {
+                            spatialPermissionLauncher.launch(
+                                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+                            )
+                        }
+                    },
+                    onAdvanced = { advancedSettingsVisible = true }
+                )
+            }
         }
     }
 
