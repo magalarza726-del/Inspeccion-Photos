@@ -26,7 +26,12 @@ object CustomReportExporter {
         }
     }
 
-    fun createPdf(context: Context, root: Inspection, config: CustomReportConfig): File {
+    fun createPdf(
+        context: Context,
+        root: Inspection,
+        config: CustomReportConfig,
+        showRouteBands: Boolean = true
+    ): File {
         val cfg = config.normalized()
         val out = File(File(context.cacheDir, "exports").apply { mkdirs() }, "${safe(root.name)}_REPORTE_PERSONALIZADO.pdf")
         val doc = PdfDocument()
@@ -94,19 +99,21 @@ object CustomReportExporter {
 
             // Do not create empty route bands for structural-only folders.
             if (hasDirectContent) {
-                ensure(32f)
-                canvas.drawRect(margin, y, pw - margin, y + 19f, fill)
-                canvas.drawRect(margin, y, pw - margin, y + 19f, border)
-                drawFittedLeft(
-                    canvas,
-                    route,
-                    margin + 6f,
-                    y + 12.5f,
-                    pw - 2f * margin - 12f,
-                    bold,
-                    5.8f
-                )
-                y += 25f
+                if (showRouteBands) {
+                    ensure(32f)
+                    canvas.drawRect(margin, y, pw - margin, y + 19f, fill)
+                    canvas.drawRect(margin, y, pw - margin, y + 19f, border)
+                    drawFittedLeft(
+                        canvas,
+                        route,
+                        margin + 6f,
+                        y + 12.5f,
+                        pw - 2f * margin - 12f,
+                        bold,
+                        5.8f
+                    )
+                    y += 25f
+                }
 
                 if (hasSections && cfg.sectionPlacement == SectionPlacement.ABOVE_MAIN_BLOCK) {
                     cfg.sections.forEach { section ->
