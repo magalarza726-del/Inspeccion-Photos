@@ -253,6 +253,7 @@ private fun FormTemplateEditor(
     var draft by remember(template.id, template.updatedAt) { mutableStateOf(template) }
     var editorTab by rememberSaveable(template.id) { mutableStateOf("Encabezado") }
     var imageSide by remember { mutableStateOf("left") }
+    var cropSide by remember { mutableStateOf<String?>(null) }
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) runCatching {
@@ -307,14 +308,16 @@ private fun FormTemplateEditor(
             FormHeaderSlotEditor(
                 slot = draft.leftHeader, palette = palette,
                 onChange = { draft = draft.copy(leftHeader = it) },
-                onPickImage = { imageSide = "left"; imagePicker.launch("image/*") }
+                onPickImage = { imageSide = "left"; imagePicker.launch("image/*") },
+                onCropImage = { cropSide = "left" }
             )
             Spacer(Modifier.height(13.dp))
             Text("Espacio 4 - derecha", color = palette.text, fontWeight = FontWeight.Bold, fontSize = 13.sp)
             FormHeaderSlotEditor(
                 slot = draft.rightHeader, palette = palette,
                 onChange = { draft = draft.copy(rightHeader = it) },
-                onPickImage = { imageSide = "right"; imagePicker.launch("image/*") }
+                onPickImage = { imageSide = "right"; imagePicker.launch("image/*") },
+                onCropImage = { cropSide = "right" }
             )
             Spacer(Modifier.height(8.dp))
             Text("Estos cuatro campos pertenecen únicamente a este formato y no modifican el Reporte de Fotos.", color = palette.muted, fontSize = 10.sp)
@@ -478,6 +481,22 @@ private fun FormTemplateEditor(
         Spacer(Modifier.height(14.dp))
         LegacyPrimaryButton("Guardar formato", palette, Modifier.fillMaxWidth()) { onSave(draft) }
     }
+    cropSide?.let { side ->
+        val slot = if (side == "left") draft.leftHeader else draft.rightHeader
+        if (slot.imagePath.isNotBlank()) {
+            HeaderImageCropDialog(
+                imagePath = slot.imagePath,
+                palette = palette,
+                onDismiss = { cropSide = null },
+                onSave = { path ->
+                    val cropped = slot.copy(type = ReportSlotType.IMAGE, imagePath = path)
+                    draft = if (side == "left") draft.copy(leftHeader = cropped)
+                            else draft.copy(rightHeader = cropped)
+                    cropSide = null
+                }
+            )
+        } else cropSide = null
+    }
 }
 
 
@@ -594,7 +613,8 @@ private fun FormHeaderSlotEditor(
     slot: ReportHeaderSlot,
     palette: LegacyPalette,
     onChange: (ReportHeaderSlot) -> Unit,
-    onPickImage: () -> Unit
+    onPickImage: () -> Unit,
+    onCropImage: () -> Unit
 ) {
     Spacer(Modifier.height(6.dp))
     LegacySegmentedChoice(
@@ -642,7 +662,16 @@ private fun FormHeaderSlotEditor(
                 } else Text("Sin imagen", color = palette.muted)
             }
             Spacer(Modifier.height(7.dp))
-            LegacySecondaryButton(if (file.exists()) "Cambiar imagen" else "Seleccionar imagen", palette, Modifier.fillMaxWidth(), onPickImage)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                LegacySecondaryButton(if (file.exists()) "Cambiar" else "Subir imagen",
+                    palette, Modifier.weight(1f), onPickImage)
+                if (file.exists()) {
+                    LegacySecondaryButton("Recortar", palette, Modifier.weight(1f), onCropImage)
+                    LegacySecondaryButton("Eliminar", palette, Modifier.weight(1f)) {
+                        onChange(slot.copy(type = ReportSlotType.EMPTY, imagePath = ""))
+                    }
+                }
+            }
         }
     }
 }
